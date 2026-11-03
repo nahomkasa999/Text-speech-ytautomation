@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fileUploader: document.getElementById('file-uploader'),
     engineStatusDot: document.getElementById('engine-status-dot'),
     engineStatusText: document.getElementById('engine-status-text'),
+    autosaveStatus: document.getElementById('autosave-status'),
 
     // Video Studio & Figma Canvas
     videoCanvas: document.getElementById('video-canvas'),
@@ -193,6 +194,148 @@ document.addEventListener('DOMContentLoaded', () => {
   el.tabModeNarration.addEventListener('click', () => setMode('narration'));
   el.tabModeVideo.addEventListener('click', () => setMode('video'));
   el.btnOpenInVideoStudio.addEventListener('click', () => setMode('video'));
+
+  // =========================================================
+  // DRAFT AUTO-SAVE BUFFER (NEVER LOSE WORK ON CLOSE/REFRESH)
+  // =========================================================
+  let saveDraftTimer = null;
+  const saveDraft = async () => {
+    if (el.autosaveStatus) el.autosaveStatus.textContent = '💾 Saving...';
+    const draft = {
+      title: el.projectTitle.value,
+      text: el.bookText.value,
+      engine: state.engine,
+      voice: state.selectedVoice,
+      speed: state.speed,
+      paragraphPause: state.paragraphPause,
+      sentencePause: state.sentencePause,
+      videoLayers: state.video.layers,
+      audioSpeed: state.video.audioSpeed,
+      updated_at: Date.now()
+    };
+
+    // 1. Instant local storage buffer
+    try {
+      localStorage.setItem('book_narrator_draft_buffer', JSON.stringify(draft));
+    } catch (e) {}
+
+    // 2. Persistent disk file buffer on server (outputs/draft.json)
+    try {
+      await fetch('/api/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: draft.title,
+          text: draft.text,
+          engine: draft.engine,
+          voice: draft.voice,
+          speed: draft.speed,
+          paragraph_pause: draft.paragraphPause,
+          sentence_pause: draft.sentencePause,
+          audio_speed: draft.audioSpeed,
+          layers: draft.videoLayers
+        })
+      });
+    } catch (e) {}
+
+    if (el.autosaveStatus) {
+      setTimeout(() => {
+        el.autosaveStatus.textContent = '💾 Saved';
+      }, 300);
+    }
+  };
+
+  const debouncedSaveDraft = () => {
+    clearTimeout(saveDraftTimer);
+    saveDraftTimer = setTimeout(saveDraft, 400);
+  };
+
+  const restoreDraft = async () => {
+    let draft = null;
+    try {
+      const localStr = localStorage.getItem('book_narrator_draft_buffer');
+      if (localStr) draft = JSON.parse(localStr);
+    } catch (e) {}
+
+    // Fallback to server disk file if localStorage is empty
+    if (!draft || (!draft.text && !draft.title)) {
+      try {
+        const res = await fetch('/api/draft').then(r => r.json());
+        if (res && (res.text || res.title || (res.layers && res.layers.length > 0))) {
+          draft = {
+            title: res.title,
+            text: res.text,
+            engine: res.engine,
+            voice: res.voice,
+            speed: res.speed,
+            paragraphPause: res.paragraph_pause,
+            sentencePause: res.sentence_pause,
+            audioSpeed: res.audio_speed,
+            videoLayers: res.layers
+          };
+        }
+      } catch (e) {}
+    }
+
+    if (draft && (draft.text || draft.title || (draft.videoLayers && draft.videoLayers.length > 0))) {
+      if (draft.text) el.bookText.value = draft.text;
+      if (draft.title) el.projectTitle.value = draft.title || '';
+      if (draft.speed) {
+        state.speed = draft.speed;
+        el.speedSlider.value = draft.speed;
+        el.speedVal.textContent = `${draft.speed.toFixed(2)}x`;
+      }
+      if (draft.paragraphPause) {
+        state.paragraphPause = draft.paragraphPause;
+        el.pauseParaSlider.value = draft.paragraphPause;
+        el.pauseParaVal.textContent = `${draft.paragraphPause.toFixed(1)}s`;
+      }
+      if (draft.sentencePause) {
+        state.sentencePause = draft.sentencePause;
+        el.pauseSentSlider.value = draft.sentencePause;
+        el.pauseSentVal.textContent = `${draft.sentencePause.toFixed(2)}s`;
+      }
+      if (draft.engine) {
+        state.engine = draft.engine;
+        el.engineTabs.forEach(t => t.classList.toggle('active', t.dataset.engine === state.engine));
+        el.panelDeployedSettings.classList.toggle('hidden', state.engine !== 'deployed');
+        el.panelCloudSettings.classList.toggle('hidden', state.engine !== 'cloud_api');
+        renderVoices();
+      }
+      if (draft.voice) {
+        state.selectedVoice = draft.voice;
+        el.voiceSelect.value = draft.voice;
+      }
+      if (draft.audioSpeed) {
+        state.video.audioSpeed = draft.audioSpeed;
+        el.videoAudioPlayer.playbackRate = draft.audioSpeed;
+        el.speedBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.speed) === draft.audioSpeed));
+      }
+      if (draft.videoLayers && Array.isArray(draft.videoLayers) && draft.videoLayers.length > 0) {
+        state.video.layers = draft.videoLayers;
+      }
+      updateStats();
+      if (el.autosaveStatus) el.autosaveStatus.textContent = '💾 Draft Restored';
+    }
+  };
+
+  // Auto-save listeners on text editor and project title
+  el.bookText.addEventListener('input', () => {
+    updateStats();
+    debouncedSaveDraft();
+  });
+  el.projectTitle.addEventListener('input', () => {
+    debouncedSaveDraft();
+  });
+  if (el.btnClearText) {
+    el.btnClearText.addEventListener('click', () => {
+      if (confirm('Are you sure you want to clear the text editor?')) {
+        el.bookText.value = '';
+        updateStats();
+        debouncedSaveDraft();
+      }
+    });
+  }
 
   // =========================================================
   // TIME & TEXT FORMATTING UTILS
@@ -334,6 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     state.video.layers.push(newLayer);
     selectLayer(newId);
+    debouncedSaveDraft();
   });
 
   // Shortcut key T for adding text
@@ -353,6 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (l && l.type === 'text') {
       state.video.layers = state.video.layers.filter(x => x.id !== l.id);
       selectLayer('layer_captions');
+      debouncedSaveDraft();
     }
   });
 
@@ -364,6 +509,7 @@ document.addEventListener('DOMContentLoaded', () => {
       l.name = e.target.value.slice(0, 15) || 'Text Layer';
       renderLayersList();
       renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      debouncedSaveDraft();
     }
   });
 
@@ -374,6 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
       l.x = Math.max(0, Math.min(1920, parseInt(e.target.value) || 0)) / 1920;
       updateFigmaSelectionBox();
       renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      debouncedSaveDraft();
     }
   });
 
@@ -383,6 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
       l.y = Math.max(0, Math.min(1080, parseInt(e.target.value) || 0)) / 1080;
       updateFigmaSelectionBox();
       renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      debouncedSaveDraft();
     }
   });
 
@@ -392,6 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
       l.width = Math.max(100, Math.min(1920, parseInt(e.target.value) || 200)) / 1920;
       updateFigmaSelectionBox();
       renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      debouncedSaveDraft();
     }
   });
 
@@ -402,6 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
       l.size = parseInt(e.target.value) || 54;
       updateFigmaSelectionBox();
       renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      debouncedSaveDraft();
     }
   });
 
@@ -410,6 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (l) {
       l.font = e.target.value;
       renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      debouncedSaveDraft();
     }
   });
 
@@ -418,6 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (l) {
       l.color = e.target.value;
       renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      debouncedSaveDraft();
     }
   });
 
@@ -428,6 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
         l.color = btn.dataset.color;
         el.captionColorPicker.value = btn.dataset.color;
         renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+        debouncedSaveDraft();
       }
     });
   });
@@ -440,6 +593,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('active');
         l.align = btn.dataset.align;
         renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+        debouncedSaveDraft();
       }
     });
   });
@@ -452,6 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('active');
         l.casing = btn.dataset.casing;
         renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+        debouncedSaveDraft();
       }
     });
   });
@@ -464,6 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('active');
         l.weight = btn.dataset.weight;
         renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+        debouncedSaveDraft();
       }
     });
   });
@@ -473,6 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (widgetLayer) {
       widgetLayer.enabled = e.target.checked;
       renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      debouncedSaveDraft();
     }
   });
 
@@ -512,6 +669,7 @@ document.addEventListener('DOMContentLoaded', () => {
     isDraggingLayer = false;
     document.removeEventListener('mousemove', onLayerDragMove);
     document.removeEventListener('mouseup', onLayerDragEnd);
+    debouncedSaveDraft();
   };
 
   // =========================================================
@@ -767,6 +925,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const spd = parseFloat(btn.dataset.speed);
       state.video.audioSpeed = spd;
       el.videoAudioPlayer.playbackRate = spd;
+      debouncedSaveDraft();
     });
   });
 
@@ -1099,25 +1258,32 @@ document.addEventListener('DOMContentLoaded', () => {
       el.panelDeployedSettings.classList.toggle('hidden', state.engine !== 'deployed');
       el.panelCloudSettings.classList.toggle('hidden', state.engine !== 'cloud_api');
       renderVoices();
+      debouncedSaveDraft();
     });
   });
 
-  el.voiceSelect.addEventListener('change', updateVoiceDescription);
+  el.voiceSelect.addEventListener('change', () => {
+    updateVoiceDescription();
+    debouncedSaveDraft();
+  });
 
   el.speedSlider.addEventListener('input', (e) => {
     state.speed = parseFloat(e.target.value);
     el.speedVal.textContent = `${state.speed.toFixed(2)}x`;
     updateStats();
+    debouncedSaveDraft();
   });
 
   el.pauseParaSlider.addEventListener('input', (e) => {
     state.paragraphPause = parseFloat(e.target.value);
     el.pauseParaVal.textContent = `${state.paragraphPause.toFixed(1)}s`;
+    debouncedSaveDraft();
   });
 
   el.pauseSentSlider.addEventListener('input', (e) => {
     state.sentencePause = parseFloat(e.target.value);
     el.pauseSentVal.textContent = `${state.sentencePause.toFixed(2)}s`;
+    debouncedSaveDraft();
   });
 
   // Generate Narration Stream
@@ -1218,6 +1384,13 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStats();
     renderHistoryList();
     setMode('narration');
+    localStorage.removeItem('book_narrator_draft_buffer');
+    fetch('/api/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: '', text: '', layers: null })
+    }).catch(() => {});
+    if (el.autosaveStatus) el.autosaveStatus.textContent = '💾 New Project';
     el.bookText.focus();
   });
 
@@ -1231,6 +1404,7 @@ document.addEventListener('DOMContentLoaded', () => {
     reader.onload = (event) => {
       el.bookText.value = event.target.result;
       updateStats();
+      debouncedSaveDraft();
     };
     reader.readAsText(file);
   });
@@ -1272,7 +1446,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Init
-  initializeEngines();
-  loadSessions();
-  updateStats();
+  const init = async () => {
+    await initializeEngines();
+    await restoreDraft();
+    await loadSessions();
+    updateStats();
+  };
+  init();
 });

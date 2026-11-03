@@ -362,6 +362,16 @@ body {
   border-color: rgba(59, 130, 246, 0.3);
 }
 
+.autosave-pill {
+  font-size: 11px;
+  color: var(--text-subtle);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: opacity 0.3s ease;
+  opacity: 0.8;
+}
+
 .editor-container {
   flex: 1;
   padding: 20px;

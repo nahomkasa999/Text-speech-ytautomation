@@ -16,6 +16,7 @@ models/*.bin
 outputs/audio/*
 !outputs/audio/.gitkeep
 outputs/sessions.json
+outputs/draft.json
 
 # OS & Editor files
 .DS_Store

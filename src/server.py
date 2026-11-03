@@ -58,6 +58,36 @@ ENGINES = {
     "cloud_api": cloud_engine
 }
 
+class DraftModel(BaseModel):
+    title: Optional[str] = ""
+    text: Optional[str] = ""
+    engine: Optional[str] = "local"
+    voice: Optional[str] = "am_adam"
+    speed: Optional[float] = 1.0
+    paragraph_pause: Optional[float] = 0.6
+    sentence_pause: Optional[float] = 0.25
+    audio_speed: Optional[float] = 1.0
+    layers: Optional[Any] = None
+
+@app.get("/api/draft")
+def get_draft():
+    draft_path = os.path.join(APP_DATA_DIR, "outputs", "draft.json")
+    if os.path.exists(draft_path):
+        try:
+            with open(draft_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+@app.post("/api/draft")
+def save_draft(draft: DraftModel):
+    draft_path = os.path.join(APP_DATA_DIR, "outputs", "draft.json")
+    os.makedirs(os.path.dirname(draft_path), exist_ok=True)
+    with open(draft_path, "w", encoding="utf-8") as f:
+        json.dump(draft.model_dump(), f, ensure_ascii=False, indent=2)
+    return {"status": "saved"}
+
 class GenerateRequest(BaseModel):
     title: Optional[str] = ""
     text: str
