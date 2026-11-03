@@ -49,19 +49,25 @@ export class PanelManager {
 
   createResizersAndZenToolbar() {
     // 1. Left panel resizer
-    this.resizerLeft = document.createElement('div');
-    this.resizerLeft.className = 'panel-resizer resizer-left';
-    this.leftSidebarEl.parentNode.insertBefore(this.resizerLeft, this.leftSidebarEl.nextSibling);
+    if (this.leftSidebarEl && this.leftSidebarEl.parentNode) {
+      this.resizerLeft = document.createElement('div');
+      this.resizerLeft.className = 'panel-resizer resizer-left';
+      this.leftSidebarEl.parentNode.insertBefore(this.resizerLeft, this.leftSidebarEl.nextSibling);
+    }
 
     // 2. Right panel resizer
-    this.resizerRight = document.createElement('div');
-    this.resizerRight.className = 'panel-resizer resizer-right';
-    this.rightSidebarEl.parentNode.insertBefore(this.resizerRight, this.rightSidebarEl);
+    if (this.rightSidebarEl && this.rightSidebarEl.parentNode) {
+      this.resizerRight = document.createElement('div');
+      this.resizerRight.className = 'panel-resizer resizer-right';
+      this.rightSidebarEl.parentNode.insertBefore(this.resizerRight, this.rightSidebarEl);
+    }
 
     // 3. Timeline resizer
-    this.resizerTimeline = document.createElement('div');
-    this.resizerTimeline.className = 'panel-resizer resizer-timeline';
-    this.timelineEl.parentNode.insertBefore(this.resizerTimeline, this.timelineEl);
+    if (this.timelineEl && this.timelineEl.parentNode) {
+      this.resizerTimeline = document.createElement('div');
+      this.resizerTimeline.className = 'panel-resizer resizer-timeline';
+      this.timelineEl.parentNode.insertBefore(this.resizerTimeline, this.timelineEl);
+    }
 
     // 4. Zen Mode Floating Toolbar
     this.zenToolbar = document.createElement('div');
@@ -83,128 +89,140 @@ export class PanelManager {
 
   attachResizerEvents() {
     // Left Edge Resizer
-    this.resizerLeft.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      this.resizerLeft.classList.add('dragging');
-      const startX = e.clientX;
-      const startW = this.leftWidth;
+    if (this.resizerLeft) {
+      this.resizerLeft.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        this.resizerLeft.classList.add('dragging');
+        const startX = e.clientX;
+        const startW = this.leftWidth;
 
-      const onMouseMove = (ev) => {
-        const newW = Math.max(180, Math.min(500, startW + (ev.clientX - startX)));
-        this.leftWidth = newW;
+        const onMouseMove = (ev) => {
+          const newW = Math.max(180, Math.min(500, startW + (ev.clientX - startX)));
+          this.leftWidth = newW;
+          this.applyLayout();
+        };
+
+        const onMouseUp = () => {
+          this.resizerLeft.classList.remove('dragging');
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+          this.saveLayout();
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+
+      // Double-click resets Left Width to 270px
+      this.resizerLeft.addEventListener('dblclick', () => {
+        this.leftWidth = 270;
         this.applyLayout();
-      };
-
-      const onMouseUp = () => {
-        this.resizerLeft.classList.remove('dragging');
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
         this.saveLayout();
-      };
-
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
-    });
-
-    // Double-click resets Left Width to 270px
-    this.resizerLeft.addEventListener('dblclick', () => {
-      this.leftWidth = 270;
-      this.applyLayout();
-      this.saveLayout();
-    });
+      });
+    }
 
     // Right Edge Resizer
-    this.resizerRight.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      this.resizerRight.classList.add('dragging');
-      const startX = e.clientX;
-      const startW = this.rightWidth;
+    if (this.resizerRight) {
+      this.resizerRight.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        this.resizerRight.classList.add('dragging');
+        const startX = e.clientX;
+        const startW = this.rightWidth;
 
-      const onMouseMove = (ev) => {
-        const newW = Math.max(220, Math.min(550, startW - (ev.clientX - startX)));
-        this.rightWidth = newW;
+        const onMouseMove = (ev) => {
+          const newW = Math.max(220, Math.min(550, startW - (ev.clientX - startX)));
+          this.rightWidth = newW;
+          this.applyLayout();
+        };
+
+        const onMouseUp = () => {
+          this.resizerRight.classList.remove('dragging');
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+          this.saveLayout();
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+
+      // Double-click resets Right Width to 320px
+      this.resizerRight.addEventListener('dblclick', () => {
+        this.rightWidth = 320;
         this.applyLayout();
-      };
-
-      const onMouseUp = () => {
-        this.resizerRight.classList.remove('dragging');
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
         this.saveLayout();
-      };
-
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
-    });
-
-    // Double-click resets Right Width to 320px
-    this.resizerRight.addEventListener('dblclick', () => {
-      this.rightWidth = 320;
-      this.applyLayout();
-      this.saveLayout();
-    });
+      });
+    }
 
     // Timeline Height Resizer
-    this.resizerTimeline.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      this.resizerTimeline.classList.add('dragging');
-      const startY = e.clientY;
-      const startH = this.timelineHeight;
+    if (this.resizerTimeline) {
+      this.resizerTimeline.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        this.resizerTimeline.classList.add('dragging');
+        const startY = e.clientY;
+        const startH = this.timelineHeight;
 
-      const onMouseMove = (ev) => {
-        const newH = Math.max(140, Math.min(500, startH - (ev.clientY - startY)));
-        this.timelineHeight = newH;
+        const onMouseMove = (ev) => {
+          const newH = Math.max(140, Math.min(500, startH - (ev.clientY - startY)));
+          this.timelineHeight = newH;
+          this.applyLayout();
+        };
+
+        const onMouseUp = () => {
+          this.resizerTimeline.classList.remove('dragging');
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+          this.saveLayout();
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+
+      // Double-click resets Timeline Height to 220px
+      this.resizerTimeline.addEventListener('dblclick', () => {
+        this.timelineHeight = 220;
         this.applyLayout();
-      };
-
-      const onMouseUp = () => {
-        this.resizerTimeline.classList.remove('dragging');
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
         this.saveLayout();
-      };
-
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
-    });
-
-    // Double-click resets Timeline Height to 220px
-    this.resizerTimeline.addEventListener('dblclick', () => {
-      this.timelineHeight = 220;
-      this.applyLayout();
-      this.saveLayout();
-    });
+      });
+    }
   }
 
   applyLayout() {
     // Left
-    if (this.leftCollapsed) {
-      this.leftSidebarEl.classList.add('collapsed');
-      this.resizerLeft.style.display = 'none';
-    } else {
-      this.leftSidebarEl.classList.remove('collapsed');
-      this.leftSidebarEl.style.width = `${this.leftWidth}px`;
-      this.resizerLeft.style.display = 'block';
+    if (this.leftSidebarEl) {
+      if (this.leftCollapsed) {
+        this.leftSidebarEl.classList.add('collapsed');
+        if (this.resizerLeft) this.resizerLeft.style.display = 'none';
+      } else {
+        this.leftSidebarEl.classList.remove('collapsed');
+        this.leftSidebarEl.style.width = `${this.leftWidth}px`;
+        if (this.resizerLeft) this.resizerLeft.style.display = 'block';
+      }
     }
 
     // Right
-    if (this.rightCollapsed) {
-      this.rightSidebarEl.classList.add('collapsed');
-      this.resizerRight.style.display = 'none';
-    } else {
-      this.rightSidebarEl.classList.remove('collapsed');
-      this.rightSidebarEl.style.width = `${this.rightWidth}px`;
-      this.resizerRight.style.display = 'block';
+    if (this.rightSidebarEl) {
+      if (this.rightCollapsed) {
+        this.rightSidebarEl.classList.add('collapsed');
+        if (this.resizerRight) this.resizerRight.style.display = 'none';
+      } else {
+        this.rightSidebarEl.classList.remove('collapsed');
+        this.rightSidebarEl.style.width = `${this.rightWidth}px`;
+        if (this.resizerRight) this.resizerRight.style.display = 'block';
+      }
     }
 
     // Timeline
-    if (this.timelineCollapsed) {
-      this.timelineEl.classList.add('collapsed');
-      this.resizerTimeline.style.display = 'none';
-    } else {
-      this.timelineEl.classList.remove('collapsed');
-      this.timelineEl.style.height = `${this.timelineHeight}px`;
-      this.resizerTimeline.style.display = 'block';
+    if (this.timelineEl) {
+      if (this.timelineCollapsed) {
+        this.timelineEl.classList.add('collapsed');
+        if (this.resizerTimeline) this.resizerTimeline.style.display = 'none';
+      } else {
+        this.timelineEl.classList.remove('collapsed');
+        this.timelineEl.style.height = `${this.timelineHeight}px`;
+        if (this.resizerTimeline) this.resizerTimeline.style.display = 'block';
+      }
     }
 
     // Update Toggle Button Active States

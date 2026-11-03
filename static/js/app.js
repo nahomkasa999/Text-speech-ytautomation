@@ -208,7 +208,16 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlayheadPosition(el.mainAudioPlayer.currentTime || 0, el.mainAudioPlayer.duration || 10);
       }
       initVideoStudio();
-      setTimeout(() => interactionMgr.fitToScreen(), 60);
+      requestAnimationFrame(() => {
+        if (typeof interactionMgr !== 'undefined' && interactionMgr.fitToScreen) {
+          interactionMgr.fitToScreen();
+        }
+      });
+      setTimeout(() => {
+        if (typeof interactionMgr !== 'undefined' && interactionMgr.fitToScreen) {
+          interactionMgr.fitToScreen();
+        }
+      }, 100);
     }
   };
 
@@ -748,13 +757,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const loadBackgroundTemplate = (url) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = url;
     img.onload = () => {
       state.video.bgImage = img;
       state.video.bgImageLoaded = true;
       renderVideoFrame();
     };
+    img.onerror = () => {
+      console.warn('Could not load background template:', url);
+    };
+    img.src = url;
   };
 
   el.bgImageUploader.addEventListener('change', (e) => {
@@ -1372,9 +1383,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Init
   const init = async () => {
-    await initializeEngines();
-    await restoreDraft();
-    await loadSessions();
+    try {
+      await initializeEngines();
+    } catch (e) {
+      console.error('Error initializing engines:', e);
+    }
+    try {
+      await restoreDraft();
+    } catch (e) {
+      console.error('Error restoring draft:', e);
+    }
+    try {
+      await loadSessions();
+      if (state.sessions.length > 0 && !state.activeSession) {
+        selectSession(state.sessions[0]);
+      }
+    } catch (e) {
+      console.error('Error loading sessions:', e);
+    }
+    initVideoStudio();
     updateStats();
   };
   init();
