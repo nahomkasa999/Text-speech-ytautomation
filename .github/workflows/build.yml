@@ -4,6 +4,40 @@ on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      app_name:
+        description: 'Application / Binary Name'
+        required: true
+        default: 'book-narrator'
+        type: string
+      bundle_models:
+        description: 'Bundle Kokoro ONNX model weights inside package?'
+        required: true
+        default: true
+        type: boolean
+      package_type:
+        description: 'Packaging style (onedir: recommended folder, or onefile: single .exe)'
+        required: true
+        default: 'onedir'
+        type: choice
+        options:
+          - onedir
+          - onefile
+      show_console:
+        description: 'Show terminal console on launch? (false for silent GUI app)'
+        required: true
+        default: false
+        type: boolean
+      model_url:
+        description: 'Kokoro ONNX Model Download URL'
+        required: false
+        default: 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx'
+        type: string
+      voices_url:
+        description: 'Kokoro voices.bin Download URL'
+        required: false
+        default: 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin'
+        type: string
 
 jobs:
   build:
@@ -12,11 +46,19 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: book-narrator-linux.tar.gz
-            cmd: tar -czf book-narrator-linux.tar.gz -C dist book-narrator
+            platform_suffix: linux
+            compress_cmd: tar -czf
+            archive_ext: tar.gz
           - os: windows-latest
-            artifact_name: book-narrator-windows.zip
-            cmd: Compress-Archive -Path dist\book-narrator -DestinationPath book-narrator-windows.zip
+            platform_suffix: windows
+            compress_cmd: zip
+            archive_ext: zip
+
+    env:
+      APP_NAME: ${{ github.event.inputs.app_name || 'book-narrator' }}
+      BUNDLE_MODELS: ${{ github.event.inputs.bundle_models || 'true' }}
+      ONEFILE: ${{ (github.event.inputs.package_type == 'onefile') && 'true' || 'false' }}
+      SHOW_CONSOLE: ${{ github.event.inputs.show_console || 'false' }}
 
     steps:
       - name: Check out repository
@@ -32,22 +74,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller pywebview
 
-      - name: Download Kokoro Model Weights
+      - name: Download Kokoro Model Weights (if enabled)
+        if: ${{ env.BUNDLE_MODELS == 'true' }}
         run: |
           mkdir -p models
-          curl -L -o models/kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
-          curl -L -o models/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+          curl -L -o models/kokoro-v1.0.onnx "${{ github.event.inputs.model_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx' }}"
+          curl -L -o models/voices-v1.0.bin "${{ github.event.inputs.voices_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' }}"
         shell: bash
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller (Using Dynamic Spec)
         run: pyinstaller --noconfirm book_narrator.spec
 
-      - name: Package Bundle
-        run: ${{ matrix.cmd }}
+      - name: Package Linux Bundle
+        if: runner.os == 'Linux'
+        run: |
+          cd dist
+          tar -czf "../${{ env.APP_NAME }}-linux.tar.gz" *
         shell: bash
+
+      - name: Package Windows Bundle
+        if: runner.os == 'Windows'
+        run: |
+          Compress-Archive -Path dist\* -DestinationPath "${{ env.APP_NAME }}-windows.zip"
+        shell: pwsh
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}
+          name: ${{ env.APP_NAME }}-${{ matrix.platform_suffix }}
+          path: ${{ env.APP_NAME }}-${{ matrix.platform_suffix }}.${{ matrix.archive_ext }}

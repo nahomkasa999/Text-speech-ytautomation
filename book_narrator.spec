@@ -1,16 +1,32 @@
 # -*- mode: python ; coding: utf-8 -*-
+"""
+Dynamic PyInstaller Spec for AI Book Narrator & YouTube Studio
+All specifications can be adjusted via environment variables or GitHub Actions inputs:
+- APP_NAME: custom executable name (default: book-narrator)
+- BUNDLE_MODELS: whether to bundle 330MB ONNX models inside (default: true)
+- ONEFILE: single file .exe vs folder (default: false)
+- SHOW_CONSOLE: show console window on launch (default: false)
+"""
 
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+import sys
+from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
+# Configurable inputs from environment variables
+APP_NAME = os.environ.get('APP_NAME', 'book-narrator').strip() or 'book-narrator'
+BUNDLE_MODELS = os.environ.get('BUNDLE_MODELS', 'true').strip().lower() in ('true', '1', 'yes')
+ONEFILE = os.environ.get('ONEFILE', 'false').strip().lower() in ('true', '1', 'yes')
+SHOW_CONSOLE = os.environ.get('SHOW_CONSOLE', 'false').strip().lower() in ('true', '1', 'yes')
+
 datas = [
     ('static', 'static'),
-    ('models', 'models'),
 ]
 
-# Collect any data files for phonemizer/espeak if needed
+if BUNDLE_MODELS and os.path.exists('models'):
+    datas.append(('models', 'models'))
+
 try:
     datas += collect_data_files('espeakng_loader')
 except Exception:
@@ -52,31 +68,55 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name='book-narrator',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='book-narrator',
-)
+if ONEFILE:
+    # Single standalone .exe file
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name=APP_NAME,
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=SHOW_CONSOLE,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+else:
+    # Fast-starting directory bundle (recommended for 300MB+ models)
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name=APP_NAME,
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=SHOW_CONSOLE,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name=APP_NAME,
+    )
