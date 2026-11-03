@@ -452,13 +452,13 @@ function drawAudioWidgetLayer(ctx, layer, scene, currentTime) {
   const startX = layer.x;
   const startY = layer.y;
   const trackW = layer.width;
-  const barY = startY + 15;
+  const barY = startY + 12;
   const color = layer.color || '#111827';
-  const thickness = layer.thickness || 4;
+  const thickness = layer.thickness || 2.5;
 
   ctx.save();
 
-  // Background track
+  // Background track (subtle / thin line)
   ctx.strokeStyle = color;
   ctx.lineWidth = thickness;
   ctx.lineCap = 'round';
@@ -467,45 +467,50 @@ function drawAudioWidgetLayer(ctx, layer, scene, currentTime) {
   ctx.lineTo(startX + trackW, barY);
   ctx.stroke();
 
-  // Scrubber ball at current progress
+  // Scrubber ball at current progress (refined radius)
   const ballX = startX + (trackW * progress);
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(ballX, barY, layer.playheadRadius || 12, 0, Math.PI * 2);
+  ctx.arc(ballX, barY, layer.playheadRadius || 7, 0, Math.PI * 2);
   ctx.fill();
 
-  // Transport control icons underneath
+  // Sleek transport control icons underneath (thin strokes, never bulky filled shapes)
   if (layer.showControls) {
-    const controlsY = barY + 50;
+    const controlsY = barY + 36;
     const centerX = startX + trackW / 2;
 
-    // Previous Triangle
-    ctx.beginPath();
-    ctx.moveTo(centerX - 90, controlsY - 14);
-    ctx.lineTo(centerX - 108, controlsY);
-    ctx.lineTo(centerX - 90, controlsY + 14);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(centerX - 108, controlsY - 14);
-    ctx.lineTo(centerX - 126, controlsY);
-    ctx.lineTo(centerX - 108, controlsY + 14);
-    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.0;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-    // Pause bars
-    ctx.fillRect(centerX - 14, controlsY - 18, 9, 36);
-    ctx.fillRect(centerX + 5, controlsY - 18, 9, 36);
+    // Previous Arrow Outline
+    ctx.beginPath();
+    ctx.moveTo(centerX - 46, controlsY - 9);
+    ctx.lineTo(centerX - 56, controlsY);
+    ctx.lineTo(centerX - 46, controlsY + 9);
+    ctx.moveTo(centerX - 56, controlsY - 9);
+    ctx.lineTo(centerX - 66, controlsY);
+    ctx.lineTo(centerX - 56, controlsY + 9);
+    ctx.stroke();
 
-    // Next Triangle
+    // Sleek Pause Bars
     ctx.beginPath();
-    ctx.moveTo(centerX + 90, controlsY - 14);
-    ctx.lineTo(centerX + 108, controlsY);
-    ctx.lineTo(centerX + 90, controlsY + 14);
-    ctx.fill();
+    ctx.moveTo(centerX - 5, controlsY - 9);
+    ctx.lineTo(centerX - 5, controlsY + 9);
+    ctx.moveTo(centerX + 5, controlsY - 9);
+    ctx.lineTo(centerX + 5, controlsY + 9);
+    ctx.stroke();
+
+    // Next Arrow Outline
     ctx.beginPath();
-    ctx.moveTo(centerX + 108, controlsY - 14);
-    ctx.lineTo(centerX + 126, controlsY);
-    ctx.lineTo(centerX + 108, controlsY + 14);
-    ctx.fill();
+    ctx.moveTo(centerX + 46, controlsY - 9);
+    ctx.lineTo(centerX + 56, controlsY);
+    ctx.lineTo(centerX + 46, controlsY + 9);
+    ctx.moveTo(centerX + 56, controlsY - 9);
+    ctx.lineTo(centerX + 66, controlsY);
+    ctx.lineTo(centerX + 56, controlsY + 9);
+    ctx.stroke();
   }
 
   ctx.restore();

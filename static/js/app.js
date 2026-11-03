@@ -3,8 +3,46 @@
  * Multi-layer frames, dynamic typography, CapCut timeline & audio speed control.
  */
 
+import { Scene, createLayerFromData, TextLayer, TranscriptionLayer, FrameLayer, ShapeLayer, AudioWidgetLayer } from './video/scene.js';
+import { HistoryManager, PropertyChangeCommand, AddLayerCommand, RemoveLayerCommand, BatchTransformCommand } from './video/history.js';
+import { renderScene, measureTextLayout } from './video/renderer.js';
+import { CanvasInteractionManager } from './video/interaction.js';
+import { PanelManager } from './video/panels.js';
+
 document.addEventListener('DOMContentLoaded', () => {
   let currentMode = 'narration';
+
+  // Initialize Core Scene & History
+  const history = new HistoryManager();
+  const scene = new Scene({
+    canvas: { width: 1920, height: 1080, background: '#C85A32' },
+    duration: 10
+  });
+
+  // Default Layers
+  const defaultCaptionLayer = new TranscriptionLayer({
+    id: 'layer_captions',
+    name: 'Synced Captions',
+    x: 880,
+    y: 240,
+    width: 920,
+    fontSize: 54,
+    fill: '#111827',
+    align: 'left'
+  });
+  const defaultAudioWidget = new AudioWidgetLayer({
+    id: 'layer_player_widget',
+    name: 'Audio Player Bar',
+    x: 840,
+    y: 720,
+    width: 940,
+    color: '#111827',
+    thickness: 2.5,
+    playheadRadius: 7
+  });
+  scene.addLayer(defaultCaptionLayer);
+  scene.addLayer(defaultAudioWidget);
+  scene.selectLayer('layer_captions');
 
   // Master State
   const state = {
@@ -18,7 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     activeSession: null,
     isGenerating: false,
 
-    // Video Studio & Multi-layer Figma System
+    // Video Studio State
     video: {
       bgImage: null,
       bgImageLoaded: false,
@@ -26,35 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
       isPlaying: false,
       isExporting: false,
       selectedLayerId: 'layer_captions',
-      syncedSegments: [],
-      
-      // Layers (Figma independent frames)
-      layers: [
-        {
-          id: 'layer_captions',
-          type: 'transcription',
-          name: 'Synced Captions',
-          x: 0.46,
-          y: 0.22,
-          width: 0.48,
-          font: "'Merriweather', serif",
-          size: 54,
-          color: '#111827',
-          weight: '700',
-          align: 'left',
-          casing: 'lower'
-        },
-        {
-          id: 'layer_player_widget',
-          type: 'player_widget',
-          name: 'Audio Player Bar',
-          x: 0.44,
-          y: 0.68,
-          width: 0.49,
-          color: '#111827',
-          enabled: true
-        }
-      ]
+      syncedSegments: []
     }
   };
 
@@ -118,6 +128,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Video Studio & Figma Canvas
     videoCanvas: document.getElementById('video-canvas'),
     canvasContainer: document.getElementById('canvas-container'),
+    videoStageContainer: document.getElementById('video-stage-container'),
+    guidesCanvas: document.getElementById('guides-canvas'),
     figmaSelectionBox: document.getElementById('figma-selection-box'),
     selectionTagName: document.getElementById('selection-tag-name'),
     bgImageUploader: document.getElementById('bg-image-uploader'),
@@ -128,6 +140,14 @@ document.addEventListener('DOMContentLoaded', () => {
     btnExportMp4: document.getElementById('btn-export-mp4'),
     exportBtnLabel: document.getElementById('export-btn-label'),
     videoProjectName: document.getElementById('video-project-name'),
+
+    // Top Bar Panel Toggles & Zen Mode
+    btnToggleLeftNarrator: document.getElementById('btn-toggle-left-narrator'),
+    btnToggleRightNarrator: document.getElementById('btn-toggle-right-narrator'),
+    btnToggleLeftPanel: document.getElementById('btn-toggle-left-panel'),
+    btnToggleRightPanel: document.getElementById('btn-toggle-right-panel'),
+    btnToggleTimeline: document.getElementById('btn-toggle-timeline'),
+    btnZenMode: document.getElementById('btn-zen-mode'),
 
     // CapCut Timeline
     btnVideoPlay: document.getElementById('btn-video-play'),
@@ -188,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlayheadPosition(el.mainAudioPlayer.currentTime || 0, el.mainAudioPlayer.duration || 10);
       }
       initVideoStudio();
+      setTimeout(() => interactionMgr.fitToScreen(), 60);
     }
   };
 
@@ -209,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
       speed: state.speed,
       paragraphPause: state.paragraphPause,
       sentencePause: state.sentencePause,
-      videoLayers: state.video.layers,
+      videoLayers: scene.toJSON().layers,
       audioSpeed: state.video.audioSpeed,
       updated_at: Date.now()
     };
@@ -312,7 +333,20 @@ document.addEventListener('DOMContentLoaded', () => {
         el.speedBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.speed) === draft.audioSpeed));
       }
       if (draft.videoLayers && Array.isArray(draft.videoLayers) && draft.videoLayers.length > 0) {
-        state.video.layers = draft.videoLayers;
+        scene.layers = [];
+        draft.videoLayers.forEach(lData => {
+          // Normalize coordinate migration if old fractional format
+          if (lData.x <= 1 && lData.width <= 1) {
+            lData.x = Math.round(lData.x * 1920);
+            lData.y = Math.round(lData.y * 1080);
+            lData.width = Math.round(lData.width * 1920);
+          }
+          const l = createLayerFromData(lData);
+          if (l) scene.addLayer(l);
+        });
+        if (!scene.getSelectedLayer()) {
+          scene.selectLayer(scene.layers[0]?.id || 'layer_captions');
+        }
       }
       updateStats();
       if (el.autosaveStatus) el.autosaveStatus.textContent = 'Draft Restored';
@@ -368,18 +402,71 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // =========================================================
+  // CORE SCENE RENDERING & INTERACTION MANAGERS
+  // =========================================================
+  const renderVideoFrame = (currentTime) => {
+    const cur = currentTime !== undefined ? currentTime : (el.videoAudioPlayer.currentTime || 0);
+    // If no synced segments, provide draft bookText into captions layer
+    const capLayer = scene.getLayer('layer_captions');
+    if (capLayer && (!scene.syncedSegments || scene.syncedSegments.length === 0)) {
+      capLayer.text = el.bookText.value.trim() ? el.bookText.value.trim().slice(0, 140) : '';
+    }
+    renderScene(canvasCtx, scene, {
+      currentTime: cur,
+      bgImage: state.video.bgImage
+    });
+  };
+
+  const interactionMgr = new CanvasInteractionManager({
+    stageEl: el.videoStageContainer || document.getElementById('video-stage-container'),
+    containerEl: el.canvasContainer,
+    canvasEl: el.videoCanvas,
+    guidesEl: el.guidesCanvas || document.getElementById('guides-canvas'),
+    selectionBoxEl: el.figmaSelectionBox,
+    scene,
+    history,
+    onRender: () => renderVideoFrame(),
+    onSelectionChange: (layer) => {
+      renderLayersList();
+      syncInspectorFromLayer();
+    }
+  });
+
+  const panelMgr = new PanelManager({
+    leftSidebarEl: document.getElementById('left-sidebar'),
+    rightSidebarEl: document.getElementById('right-sidebar'),
+    timelineEl: document.getElementById('capcut-timeline-container'),
+    onResizeCanvas: () => {
+      interactionMgr.fitToScreen();
+    }
+  });
+
+  // Panel Toggle Shortcuts & Buttons
+  if (el.btnToggleLeftNarrator) el.btnToggleLeftNarrator.addEventListener('click', () => panelMgr.toggleLeft());
+  if (el.btnToggleRightNarrator) el.btnToggleRightNarrator.addEventListener('click', () => panelMgr.toggleRight());
+  if (el.btnToggleLeftPanel) el.btnToggleLeftPanel.addEventListener('click', () => panelMgr.toggleLeft());
+  if (el.btnToggleRightPanel) el.btnToggleRightPanel.addEventListener('click', () => panelMgr.toggleRight());
+  if (el.btnToggleTimeline) el.btnToggleTimeline.addEventListener('click', () => panelMgr.toggleTimeline());
+  if (el.btnZenMode) el.btnZenMode.addEventListener('click', () => panelMgr.toggleZenMode());
+
+  // Zen Mode Play Button Integration
+  const zenPlayBtn = document.getElementById('zen-play-btn');
+  if (zenPlayBtn) zenPlayBtn.addEventListener('click', () => toggleVideoPlay());
+
+  // =========================================================
   // FIGMA MULTI-LAYER ENGINE
   // =========================================================
   const getSelectedLayer = () => {
-    return state.video.layers.find(l => l.id === state.video.selectedLayerId) || state.video.layers[0];
+    return scene.getSelectedLayer() || scene.layers[0];
   };
 
   const renderLayersList = () => {
     el.layersList.innerHTML = '';
-    state.video.layers.forEach(l => {
+    const selected = scene.getSelectedLayer();
+    scene.layers.forEach(l => {
       const item = document.createElement('div');
-      item.className = `layer-item ${l.id === state.video.selectedLayerId ? 'active' : ''}`;
-      const icon = l.type === 'transcription' ? 'T' : (l.type === 'player_widget' ? 'P' : 'T');
+      item.className = `layer-item ${selected && selected.id === l.id ? 'active' : ''}`;
+      const icon = l.type === 'transcription' ? 'T' : (l.type === 'audio_widget' ? 'P' : 'T');
       item.innerHTML = `<span style="font-weight:700; opacity:0.6; font-size:11px;">${icon}</span><span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${l.name}</span>`;
       item.addEventListener('click', () => selectLayer(l.id));
       el.layersList.appendChild(item);
@@ -387,22 +474,25 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const selectLayer = (layerId) => {
-    state.video.selectedLayerId = layerId;
+    scene.selectLayer(layerId);
     renderLayersList();
     syncInspectorFromLayer();
-    updateFigmaSelectionBox();
-    renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+    interactionMgr.updateSelectionBox();
+    renderVideoFrame();
   };
 
   // Sync Right Sidebar Inspector Fields to the active layer
   const syncInspectorFromLayer = () => {
     const l = getSelectedLayer();
-    if (!l) return;
+    if (!l) {
+      el.figmaSelectionBox.classList.add('hidden');
+      return;
+    }
 
-    // Numerical coordinates (mapped to 1920x1080 canvas pixels)
-    el.propPosX.value = Math.round(l.x * 1920);
-    el.propPosY.value = Math.round(l.y * 1080);
-    el.propSizeW.value = Math.round(l.width * 1920);
+    // Numerical coordinates in 1920x1080 canvas pixels
+    el.propPosX.value = Math.round(l.x);
+    el.propPosY.value = Math.round(l.y);
+    el.propSizeW.value = Math.round(l.width);
 
     // Is it a custom text layer? Show content input
     if (l.type === 'text') {
@@ -413,69 +503,55 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       el.customTextEditorGroup.classList.add('hidden');
       // Do not allow deleting core captions or player bar
-      el.btnDeleteLayer.style.display = (l.type === 'transcription' || l.type === 'player_widget') ? 'none' : 'block';
+      el.btnDeleteLayer.style.display = (l.type === 'transcription' || l.type === 'audio_widget') ? 'none' : 'block';
     }
 
-    if (l.type === 'player_widget') {
+    if (l.type === 'audio_widget') {
       el.typographySettingsGroup.classList.add('hidden');
       document.getElementById('alignment-settings-group').classList.add('hidden');
       document.getElementById('casing-settings-group').classList.add('hidden');
       document.getElementById('weight-settings-group').classList.add('hidden');
+      el.togglePlayerWidget.checked = l.visible;
     } else {
       el.typographySettingsGroup.classList.remove('hidden');
       document.getElementById('alignment-settings-group').classList.remove('hidden');
       document.getElementById('casing-settings-group').classList.remove('hidden');
       document.getElementById('weight-settings-group').classList.remove('hidden');
 
-      el.captionFontSelect.value = l.font || "'Merriweather', serif";
-      el.captionSizeNum.value = l.size || 54;
-      el.captionColorPicker.value = l.color || '#111827';
+      el.captionFontSelect.value = l.fontFamily || "'Merriweather', serif";
+      el.captionSizeNum.value = l.fontSize || 54;
+      el.captionColorPicker.value = l.fill || '#111827';
 
       el.alignBtns.forEach(b => b.classList.toggle('active', b.dataset.align === (l.align || 'left')));
-      el.casingBtns.forEach(b => b.classList.toggle('active', b.dataset.casing === (l.casing || 'lower')));
-      el.weightBtns.forEach(b => b.classList.toggle('active', b.dataset.weight === (l.weight || '700')));
+      el.casingBtns.forEach(b => b.classList.toggle('active', b.dataset.casing === (l.casing || 'none') || (b.dataset.casing === 'normal' && l.casing === 'none') || (b.dataset.casing === 'lower' && l.casing === 'lower')));
+      el.weightBtns.forEach(b => b.classList.toggle('active', b.dataset.weight === (String(l.fontWeight) || '700')));
     }
 
     el.selectionTagName.textContent = l.name;
-  };
-
-  // Update position of Figma Selection Bounding Box on canvas
-  const updateFigmaSelectionBox = () => {
-    const l = getSelectedLayer();
-    if (!l) {
-      el.figmaSelectionBox.classList.add('hidden');
-      return;
-    }
-
-    el.figmaSelectionBox.classList.remove('hidden');
-    el.figmaSelectionBox.style.left = `${l.x * 100}%`;
-    el.figmaSelectionBox.style.top = `${l.y * 100}%`;
-    el.figmaSelectionBox.style.width = `${l.width * 100}%`;
-    
-    // Height adapts based on layer type
-    const heightPercent = l.type === 'player_widget' ? 12 : (l.size ? (l.size * 2.8 / 1080) * 100 : 15);
-    el.figmaSelectionBox.style.height = `${Math.max(8, heightPercent)}%`;
+    interactionMgr.updateSelectionBox();
   };
 
   // Add new independent Text Layer (T button)
   el.btnAddTextLayer.addEventListener('click', () => {
+    const count = scene.layers.filter(l => l.type === 'text').length + 1;
     const newId = `layer_text_${Date.now()}`;
-    const newLayer = {
+    const newLayer = new TextLayer({
       id: newId,
-      type: 'text',
-      name: `Text ${state.video.layers.filter(l => l.type === 'text').length + 1}`,
+      name: `Text ${count}`,
       text: 'Subtitle Heading',
-      x: 0.46,
-      y: 0.12,
-      width: 0.45,
-      font: "'Playfair Display', serif",
-      size: 44,
-      color: '#111827',
-      weight: '700',
-      align: 'left',
-      casing: 'normal'
-    };
-    state.video.layers.push(newLayer);
+      x: 880,
+      y: 120 + count * 60,
+      width: 900,
+      fontFamily: "'Playfair Display', serif",
+      fontSize: 44,
+      fontWeight: '700',
+      fill: '#111827',
+      align: 'left'
+    });
+    scene.addLayer(newLayer);
+    history.execute(new AddLayerCommand(scene, newLayer, () => {
+      selectLayer(newId);
+    }));
     selectLayer(newId);
     debouncedSaveDraft();
   });
@@ -495,7 +571,10 @@ document.addEventListener('DOMContentLoaded', () => {
   el.btnDeleteLayer.addEventListener('click', () => {
     const l = getSelectedLayer();
     if (l && l.type === 'text') {
-      state.video.layers = state.video.layers.filter(x => x.id !== l.id);
+      const removedLayer = l;
+      history.execute(new RemoveLayerCommand(scene, removedLayer, () => {
+        selectLayer('layer_captions');
+      }));
       selectLayer('layer_captions');
       debouncedSaveDraft();
     }
@@ -507,8 +586,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (l && l.type === 'text') {
       l.text = e.target.value;
       l.name = e.target.value.slice(0, 15) || 'Text Layer';
+      measureTextLayout(canvasCtx, l);
       renderLayersList();
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      interactionMgr.updateSelectionBox();
+      renderVideoFrame();
       debouncedSaveDraft();
     }
   });
@@ -517,9 +598,9 @@ document.addEventListener('DOMContentLoaded', () => {
   el.propPosX.addEventListener('input', (e) => {
     const l = getSelectedLayer();
     if (l) {
-      l.x = Math.max(0, Math.min(1920, parseInt(e.target.value) || 0)) / 1920;
-      updateFigmaSelectionBox();
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      l.x = parseInt(e.target.value) || 0;
+      interactionMgr.updateSelectionBox();
+      renderVideoFrame();
       debouncedSaveDraft();
     }
   });
@@ -527,9 +608,9 @@ document.addEventListener('DOMContentLoaded', () => {
   el.propPosY.addEventListener('input', (e) => {
     const l = getSelectedLayer();
     if (l) {
-      l.y = Math.max(0, Math.min(1080, parseInt(e.target.value) || 0)) / 1080;
-      updateFigmaSelectionBox();
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      l.y = parseInt(e.target.value) || 0;
+      interactionMgr.updateSelectionBox();
+      renderVideoFrame();
       debouncedSaveDraft();
     }
   });
@@ -537,9 +618,12 @@ document.addEventListener('DOMContentLoaded', () => {
   el.propSizeW.addEventListener('input', (e) => {
     const l = getSelectedLayer();
     if (l) {
-      l.width = Math.max(100, Math.min(1920, parseInt(e.target.value) || 200)) / 1920;
-      updateFigmaSelectionBox();
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      l.width = Math.max(50, Math.min(1920, parseInt(e.target.value) || 200));
+      if (l.type === 'text' || l.type === 'transcription') {
+        measureTextLayout(canvasCtx, l);
+      }
+      interactionMgr.updateSelectionBox();
+      renderVideoFrame();
       debouncedSaveDraft();
     }
   });
@@ -548,9 +632,12 @@ document.addEventListener('DOMContentLoaded', () => {
   el.captionSizeNum.addEventListener('input', (e) => {
     const l = getSelectedLayer();
     if (l) {
-      l.size = parseInt(e.target.value) || 54;
-      updateFigmaSelectionBox();
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      l.fontSize = parseInt(e.target.value) || 54;
+      if (l.type === 'text' || l.type === 'transcription') {
+        measureTextLayout(canvasCtx, l);
+      }
+      interactionMgr.updateSelectionBox();
+      renderVideoFrame();
       debouncedSaveDraft();
     }
   });
@@ -558,8 +645,12 @@ document.addEventListener('DOMContentLoaded', () => {
   el.captionFontSelect.addEventListener('change', (e) => {
     const l = getSelectedLayer();
     if (l) {
-      l.font = e.target.value;
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      l.fontFamily = e.target.value;
+      if (l.type === 'text' || l.type === 'transcription') {
+        measureTextLayout(canvasCtx, l);
+      }
+      interactionMgr.updateSelectionBox();
+      renderVideoFrame();
       debouncedSaveDraft();
     }
   });
@@ -567,8 +658,8 @@ document.addEventListener('DOMContentLoaded', () => {
   el.captionColorPicker.addEventListener('input', (e) => {
     const l = getSelectedLayer();
     if (l) {
-      l.color = e.target.value;
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      l.fill = e.target.value;
+      renderVideoFrame();
       debouncedSaveDraft();
     }
   });
@@ -577,9 +668,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => {
       const l = getSelectedLayer();
       if (l) {
-        l.color = btn.dataset.color;
+        l.fill = btn.dataset.color;
         el.captionColorPicker.value = btn.dataset.color;
-        renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+        renderVideoFrame();
         debouncedSaveDraft();
       }
     });
@@ -592,7 +683,7 @@ document.addEventListener('DOMContentLoaded', () => {
         el.alignBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         l.align = btn.dataset.align;
-        renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+        renderVideoFrame();
         debouncedSaveDraft();
       }
     });
@@ -604,8 +695,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (l) {
         el.casingBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        l.casing = btn.dataset.casing;
-        renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+        const casing = btn.dataset.casing === 'normal' ? 'none' : btn.dataset.casing;
+        l.casing = casing;
+        if (l.type === 'text' || l.type === 'transcription') {
+          measureTextLayout(canvasCtx, l);
+        }
+        interactionMgr.updateSelectionBox();
+        renderVideoFrame();
         debouncedSaveDraft();
       }
     });
@@ -617,60 +713,25 @@ document.addEventListener('DOMContentLoaded', () => {
       if (l) {
         el.weightBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        l.weight = btn.dataset.weight;
-        renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+        l.fontWeight = btn.dataset.weight;
+        if (l.type === 'text' || l.type === 'transcription') {
+          measureTextLayout(canvasCtx, l);
+        }
+        interactionMgr.updateSelectionBox();
+        renderVideoFrame();
         debouncedSaveDraft();
       }
     });
   });
 
   el.togglePlayerWidget.addEventListener('change', (e) => {
-    const widgetLayer = state.video.layers.find(l => l.type === 'player_widget');
+    const widgetLayer = scene.getLayer('layer_player_widget');
     if (widgetLayer) {
-      widgetLayer.enabled = e.target.checked;
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      widgetLayer.visible = e.target.checked;
+      renderVideoFrame();
       debouncedSaveDraft();
     }
   });
-
-  // Canvas Dragging of the Figma Bounding Box
-  let isDraggingLayer = false;
-  let dragOriginX, dragOriginY, initialLX, initialLY;
-
-  el.figmaSelectionBox.addEventListener('mousedown', (e) => {
-    isDraggingLayer = true;
-    dragOriginX = e.clientX;
-    dragOriginY = e.clientY;
-    const l = getSelectedLayer();
-    initialLX = l.x;
-    initialLY = l.y;
-    document.addEventListener('mousemove', onLayerDragMove);
-    document.addEventListener('mouseup', onLayerDragEnd);
-  });
-
-  const onLayerDragMove = (e) => {
-    if (!isDraggingLayer) return;
-    const containerRect = el.canvasContainer.getBoundingClientRect();
-    const deltaX = (e.clientX - dragOriginX) / containerRect.width;
-    const deltaY = (e.clientY - dragOriginY) / containerRect.height;
-
-    const l = getSelectedLayer();
-    if (l) {
-      l.x = Math.max(0.02, Math.min(0.95 - l.width, initialLX + deltaX));
-      l.y = Math.max(0.02, Math.min(0.95, initialLY + deltaY));
-      el.propPosX.value = Math.round(l.x * 1920);
-      el.propPosY.value = Math.round(l.y * 1080);
-      updateFigmaSelectionBox();
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
-    }
-  };
-
-  const onLayerDragEnd = () => {
-    isDraggingLayer = false;
-    document.removeEventListener('mousemove', onLayerDragMove);
-    document.removeEventListener('mouseup', onLayerDragEnd);
-    debouncedSaveDraft();
-  };
 
   // =========================================================
   // VIDEO CANVAS RENDERING
@@ -679,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!state.video.bgImage) {
       loadBackgroundTemplate('/templates/sample-book.jpg');
     } else {
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      renderVideoFrame();
     }
     renderLayersList();
     selectLayer('layer_captions');
@@ -692,7 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
     img.onload = () => {
       state.video.bgImage = img;
       state.video.bgImageLoaded = true;
-      renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+      renderVideoFrame();
     };
   };
 
@@ -707,149 +768,6 @@ document.addEventListener('DOMContentLoaded', () => {
   el.btnSampleTemplate.addEventListener('click', () => {
     loadBackgroundTemplate('/templates/sample-book.jpg');
   });
-
-  const getActiveCaptionText = (time) => {
-    if (state.video.syncedSegments.length === 0) {
-      return (el.bookText.value.trim() || 'let me say that again your emotions are not your friend').slice(0, 140);
-    }
-    const current = state.video.syncedSegments.find(s => time >= s.start && time <= s.end);
-    return current ? current.text : (state.video.syncedSegments[0]?.text || '');
-  };
-
-  const formatTextCasing = (str, casing) => {
-    if (casing === 'lower') return str.toLowerCase();
-    if (casing === 'upper') return str.toUpperCase();
-    return str;
-  };
-
-  // Master Render Frame Function (draws Background, Player Widget, and all Text Layers)
-  const renderVideoFrame = (currentTime) => {
-    const width = 1920;
-    const height = 1080;
-    canvasCtx.clearRect(0, 0, width, height);
-
-    // 1. Background Image
-    if (state.video.bgImageLoaded && state.video.bgImage) {
-      canvasCtx.drawImage(state.video.bgImage, 0, 0, width, height);
-    } else {
-      canvasCtx.fillStyle = '#C85A32';
-      canvasCtx.fillRect(0, 0, width, height);
-    }
-
-    const duration = el.videoAudioPlayer.duration || 1;
-    const progress = Math.min(1, Math.max(0, currentTime / duration));
-
-    // 2. Render Each Layer in Order
-    state.video.layers.forEach(layer => {
-      if (layer.type === 'player_widget') {
-        if (layer.enabled) drawAestheticAudioWidget(canvasCtx, progress, width, height, layer);
-      } else if (layer.type === 'transcription') {
-        const textToRender = formatTextCasing(getActiveCaptionText(currentTime), layer.casing);
-        drawTextLayer(canvasCtx, textToRender, width, height, layer);
-      } else if (layer.type === 'text') {
-        const textToRender = formatTextCasing(layer.text || 'Text', layer.casing);
-        drawTextLayer(canvasCtx, textToRender, width, height, layer);
-      }
-    });
-  };
-
-  // Draw Text Layer with Word Wrapping & Alignment
-  const drawTextLayer = (ctx, text, canvasW, canvasH, layer) => {
-    if (!text) return;
-    ctx.save();
-    ctx.font = `${layer.weight || 700} ${layer.size || 54}px ${layer.font || "'Merriweather', serif"}`;
-    ctx.fillStyle = layer.color || '#111827';
-    ctx.textBaseline = 'top';
-
-    const maxLineWidth = canvasW * (layer.width || 0.45);
-    const startX = canvasW * layer.x;
-    const startY = canvasH * layer.y;
-    const lineHeight = (layer.size || 54) * 1.35;
-
-    const words = text.split(' ');
-    let lines = [];
-    let curLine = '';
-
-    for (let n = 0; n < words.length; n++) {
-      const testLine = curLine + words[n] + ' ';
-      const testWidth = ctx.measureText(testLine).width;
-      if (testWidth > maxLineWidth && n > 0) {
-        lines.push(curLine.trim());
-        curLine = words[n] + ' ';
-      } else {
-        curLine = testLine;
-      }
-    }
-    lines.push(curLine.trim());
-
-    lines.forEach((l, idx) => {
-      let lineX = startX;
-      if (layer.align === 'center') {
-        const w = ctx.measureText(l).width;
-        lineX = startX + (maxLineWidth - w) / 2;
-      } else if (layer.align === 'right') {
-        const w = ctx.measureText(l).width;
-        lineX = startX + (maxLineWidth - ctx.measureText(l).width);
-      }
-      ctx.fillText(l, lineX, startY + (idx * lineHeight));
-    });
-    ctx.restore();
-  };
-
-  // Aesthetic Audio Player Bar Overlay
-  const drawAestheticAudioWidget = (ctx, progress, canvasW, canvasH, layer) => {
-    const startX = canvasW * layer.x;
-    const barWidth = canvasW * layer.width;
-    const endX = startX + barWidth;
-    const barY = canvasH * layer.y;
-    const currentX = startX + (barWidth * progress);
-
-    ctx.save();
-    ctx.strokeStyle = layer.color || '#111827';
-    ctx.fillStyle = layer.color || '#111827';
-    ctx.lineWidth = 6;
-    ctx.lineCap = 'round';
-
-    // Horizontal track line
-    ctx.beginPath();
-    ctx.moveTo(startX, barY);
-    ctx.lineTo(endX, barY);
-    ctx.stroke();
-
-    // Progress dot
-    ctx.beginPath();
-    ctx.arc(currentX, barY, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Transport Icons: <<  || / >  >>
-    const iconCenterY = barY + 75;
-    const centerX = startX + (barWidth / 2);
-
-    // Prev <<
-    const prevX = centerX - 120;
-    ctx.beginPath();
-    ctx.moveTo(prevX + 15, iconCenterY - 20); ctx.lineTo(prevX - 15, iconCenterY); ctx.lineTo(prevX + 15, iconCenterY + 20); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(prevX - 5, iconCenterY - 20); ctx.lineTo(prevX - 35, iconCenterY); ctx.lineTo(prevX - 5, iconCenterY + 20); ctx.fill();
-
-    // Play/Pause
-    if (state.video.isPlaying) {
-      ctx.fillRect(centerX - 16, iconCenterY - 24, 10, 48);
-      ctx.fillRect(centerX + 6, iconCenterY - 24, 10, 48);
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(centerX - 15, iconCenterY - 24); ctx.lineTo(centerX + 22, iconCenterY); ctx.lineTo(centerX - 15, iconCenterY + 24); ctx.fill();
-    }
-
-    // Next >>
-    const nextX = centerX + 120;
-    ctx.beginPath();
-    ctx.moveTo(nextX - 15, iconCenterY - 20); ctx.lineTo(nextX + 15, iconCenterY); ctx.lineTo(nextX - 15, iconCenterY + 20); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(nextX + 5, iconCenterY - 20); ctx.lineTo(nextX + 35, iconCenterY); ctx.lineTo(nextX + 5, iconCenterY + 20); ctx.fill();
-
-    ctx.restore();
-  };
 
   // =========================================================
   // CAPCUT-STYLE MULTI-TRACK TIMELINE ENGINE
@@ -907,6 +825,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const leftPx = 90 + (pct * laneWidth);
     el.timelinePlayhead.style.left = `${leftPx}px`;
     el.videoTimecode.textContent = `${formatTimecode(cur)} / ${formatTimecode(dur)}`;
+
+    const zenTimecode = document.getElementById('zen-timecode');
+    if (zenTimecode) zenTimecode.textContent = `${formatTimecode(cur)} / ${formatTimecode(dur)}`;
 
     // Highlight active subtitle block on timeline
     const blocks = el.laneSubtitles.querySelectorAll('.caption-block');
@@ -1140,6 +1061,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (sentences.length === 0 || !totalDuration) {
       state.video.syncedSegments = [{ start: 0, end: totalDuration || 10, text: text }];
+      scene.syncedSegments = state.video.syncedSegments;
+      scene.duration = totalDuration || 10;
       return;
     }
 
@@ -1152,6 +1075,8 @@ document.addEventListener('DOMContentLoaded', () => {
       currentStart += segDur;
       return seg;
     });
+    scene.syncedSegments = state.video.syncedSegments;
+    scene.duration = totalDuration;
   };
 
   const loadSessions = async () => {
