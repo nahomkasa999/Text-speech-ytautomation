@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // =========================================================
   let saveDraftTimer = null;
   const saveDraft = async () => {
-    if (el.autosaveStatus) el.autosaveStatus.textContent = '💾 Saving...';
+    if (el.autosaveStatus) el.autosaveStatus.textContent = 'Saving...';
     const draft = {
       title: el.projectTitle.value,
       text: el.bookText.value,
@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (el.autosaveStatus) {
       setTimeout(() => {
-        el.autosaveStatus.textContent = '💾 Saved';
+        el.autosaveStatus.textContent = 'Saved';
       }, 300);
     }
   };
@@ -315,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.video.layers = draft.videoLayers;
       }
       updateStats();
-      if (el.autosaveStatus) el.autosaveStatus.textContent = '💾 Draft Restored';
+      if (el.autosaveStatus) el.autosaveStatus.textContent = 'Draft Restored';
     }
   };
 
@@ -379,8 +379,8 @@ document.addEventListener('DOMContentLoaded', () => {
     state.video.layers.forEach(l => {
       const item = document.createElement('div');
       item.className = `layer-item ${l.id === state.video.selectedLayerId ? 'active' : ''}`;
-      const icon = l.type === 'transcription' ? '📝' : (l.type === 'player_widget' ? '🎵' : '🔤');
-      item.innerHTML = `<span>${icon}</span><span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${l.name}</span>`;
+      const icon = l.type === 'transcription' ? 'T' : (l.type === 'player_widget' ? 'P' : 'T');
+      item.innerHTML = `<span style="font-weight:700; opacity:0.6; font-size:11px;">${icon}</span><span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${l.name}</span>`;
       item.addEventListener('click', () => selectLayer(l.id));
       el.layersList.appendChild(item);
     });
@@ -1390,7 +1390,7 @@ document.addEventListener('DOMContentLoaded', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: '', text: '', layers: null })
     }).catch(() => {});
-    if (el.autosaveStatus) el.autosaveStatus.textContent = '💾 New Project';
+    if (el.autosaveStatus) el.autosaveStatus.textContent = 'New Project';
     el.bookText.focus();
   });
 

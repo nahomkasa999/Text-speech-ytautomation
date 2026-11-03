@@ -12,7 +12,7 @@ if [ ! -d ".venv" ]; then
 fi
 
 echo "========================================================"
-echo "  🎙️  AI Book Narrator Studio"
+echo "  AI Book Narrator Studio"
 echo "  Engines: Local Kokoro-82M | Deployed RunPod | Cloud API"
 echo "  URL:     http://127.0.0.1:8000"
 echo "========================================================"

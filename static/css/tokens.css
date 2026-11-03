@@ -1,0 +1,106 @@
+/**
+ * Figma Dark UI Design Tokens
+ * 100% offline, low-contrast subtle dividers, precision inputs
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/inter/Inter-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/inter/Inter-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter/Inter-SemiBold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/inter/Inter-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Medium.woff2') format('woff2');
+}
+
+:root {
+  /* Color Palette */
+  --bg-app: #1E1E1E;
+  --bg-panel: #2C2C2C;
+  --bg-panel-raised: #383838;
+  --bg-input: #383838;
+  --bg-hover: #3E3E3E;
+  --bg-active: #4A4A4A;
+  
+  --border-subtle: #444444;
+  --border-focus: #0D99FF;
+  --border-divider: #383838;
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #B3B3B3;
+  --text-disabled: #7A7A7A;
+  --text-inverse: #000000;
+
+  /* Accents */
+  --accent-blue: #0D99FF;
+  --accent-selection: #0D99FF;
+  --accent-playhead: #F24822;
+  --accent-success: #10B981;
+  --accent-danger: #EF4444;
+  --accent-warning: #F59E0B;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --font-size-xs: 10px;
+  --font-size-sm: 11px; /* labels */
+  --font-size-base: 12px; /* values, body */
+  --font-size-md: 13px; /* section titles */
+  --font-size-lg: 14px;
+  --font-size-xl: 16px;
+
+  /* Radius */
+  --radius-handle: 2px;
+  --radius-input: 4px;
+  --radius-panel: 6px;
+  --radius-pill: 9999px;
+
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  /* Component Dimensions */
+  --row-height-field: 28px;
+  --btn-icon-size: 28px;
+}
