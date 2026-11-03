@@ -122,7 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bgImageUploader: document.getElementById('bg-image-uploader'),
     btnSampleTemplate: document.getElementById('btn-sample-template'),
     btnAddTextLayer: document.getElementById('btn-add-text-layer'),
-    videoAudioPlayer: document.getElementById('video-audio-player'),
+    // Shared Master Audio Player (Guarantees sound always works in both Narrator & Video Studio)
+    videoAudioPlayer: document.getElementById('main-audio-player'),
     btnExportMp4: document.getElementById('btn-export-mp4'),
     exportBtnLabel: document.getElementById('export-btn-label'),
     videoProjectName: document.getElementById('video-project-name'),
@@ -179,8 +180,11 @@ document.addEventListener('DOMContentLoaded', () => {
       el.panelVoiceSettings.classList.add('hidden');
       el.panelVideoSettings.classList.remove('hidden');
 
-      if (!state.activeSession && state.sessions.length > 0) {
+      if (state.sessions.length > 0 && (!state.activeSession || !el.mainAudioPlayer.src)) {
         selectSession(state.sessions[0]);
+      } else if (state.activeSession) {
+        buildTimelineRulerAndTracks();
+        updatePlayheadPosition(el.mainAudioPlayer.currentTime || 0, el.mainAudioPlayer.duration || 10);
       }
       initVideoStudio();
     }
@@ -773,20 +777,39 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (state.video.isPlaying) {
+    if (!el.videoAudioPlayer.paused) {
       el.videoAudioPlayer.pause();
       state.video.isPlaying = false;
       el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
     } else {
       el.videoAudioPlayer.playbackRate = state.video.audioSpeed;
-      el.videoAudioPlayer.play();
-      state.video.isPlaying = true;
-      el.videoPlaySvg.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
-      requestAnimationFrame(capcutAnimationLoop);
+      const playPromise = el.videoAudioPlayer.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          state.video.isPlaying = true;
+          el.videoPlaySvg.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+          requestAnimationFrame(capcutAnimationLoop);
+        }).catch(err => {
+          console.error("Audio playback error:", err);
+          alert("Audio error: Click on the page or select a chapter to enable audio playback.");
+        });
+      }
     }
   };
 
   el.btnVideoPlay.addEventListener('click', toggleVideoPlay);
+
+  // Sync state if audio is played or paused from native controls
+  el.videoAudioPlayer.addEventListener('play', () => {
+    state.video.isPlaying = true;
+    el.videoPlaySvg.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+    requestAnimationFrame(capcutAnimationLoop);
+  });
+
+  el.videoAudioPlayer.addEventListener('pause', () => {
+    state.video.isPlaying = false;
+    el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+  });
 
   el.btnVideoStop.addEventListener('click', () => {
     el.videoAudioPlayer.pause();
@@ -838,12 +861,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Hide Figma selection handles during export
     el.figmaSelectionBox.classList.add('hidden');
+    el.videoAudioPlayer.pause();
     el.videoAudioPlayer.currentTime = 0;
 
     try {
       const stream = el.videoCanvas.captureStream(30);
+      
+      // Use an isolated audio instance for recording so the master player is NEVER hijacked or muted
+      const exportAudio = new Audio(state.activeSession.audio_url);
+      exportAudio.crossOrigin = 'anonymous';
+      exportAudio.playbackRate = state.video.audioSpeed;
+
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioCtx.createMediaElementSource(el.videoAudioPlayer);
+      const source = audioCtx.createMediaElementSource(exportAudio);
       const dest = audioCtx.createMediaStreamDestination();
       source.connect(dest);
       source.connect(audioCtx.destination);
@@ -878,18 +908,30 @@ document.addEventListener('DOMContentLoaded', () => {
         el.btnExportMp4.disabled = false;
         el.exportBtnLabel.textContent = 'Export MP4';
         state.video.isExporting = false;
+        exportAudio.pause();
+        audioCtx.close().catch(() => {});
         alert(`Video successfully exported as ${filename}.${ext}!`);
       };
 
       recorder.start();
-      el.videoAudioPlayer.playbackRate = state.video.audioSpeed;
-      await el.videoAudioPlayer.play();
+      await exportAudio.play();
       state.video.isPlaying = true;
-      requestAnimationFrame(capcutAnimationLoop);
 
-      el.videoAudioPlayer.onended = () => {
+      // Sync canvas animation with export audio
+      const exportSyncLoop = () => {
+        if (!state.video.isExporting) return;
+        const cur = exportAudio.currentTime;
+        const dur = exportAudio.duration || 1;
+        renderVideoFrame(cur);
+        updatePlayheadPosition(cur, dur);
+        if (cur < dur) {
+          requestAnimationFrame(exportSyncLoop);
+        }
+      };
+      requestAnimationFrame(exportSyncLoop);
+
+      exportAudio.onended = () => {
         recorder.stop();
-        audioCtx.close();
       };
     } catch (err) {
       alert(`Export error: ${err.message}`);
@@ -913,13 +955,14 @@ document.addEventListener('DOMContentLoaded', () => {
     el.audioDeck.classList.remove('hidden');
     el.deckTitle.textContent = sess.title;
     el.deckSubtitle.textContent = `${sess.word_count.toLocaleString()} words • ${formatDuration(sess.duration_seconds)}`;
+    // Master audio setup (shared between Narrator deck & Video Studio)
     el.mainAudioPlayer.src = sess.audio_url;
+    el.mainAudioPlayer.load(); // Forces immediate browser audio decode
     el.btnDownloadAudio.href = sess.audio_url;
     el.btnDownloadAudio.setAttribute('download', `${sess.title.replace(/[^a-z0-9_-]/gi, '_')}.wav`);
 
     // Sync into Video Studio
     el.videoProjectName.textContent = sess.title;
-    el.videoAudioPlayer.src = sess.audio_url;
 
     // Build timeline subtitle segments
     buildSyncedSegments(sess.text, sess.duration_seconds);
