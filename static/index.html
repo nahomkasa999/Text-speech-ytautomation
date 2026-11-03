@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Book Narrator & YouTube Automation Studio</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- LEFT SIDEBAR: History & Projects -->
+    <aside class="sidebar left-sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+          </div>
+          <span class="brand-name">Book Studio</span>
+        </div>
+        <button id="btn-new-project" class="btn btn-primary btn-sm btn-icon-only" title="New Project">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+
+      <!-- Studio Mode Switcher -->
+      <div class="mode-switcher-container">
+        <button id="tab-mode-narration" class="mode-tab active">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+          <span>🎙️ Narrator</span>
+        </button>
+        <button id="tab-mode-video" class="mode-tab">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><polygon points="10 9 15 12 10 15 10 9"/></svg>
+          <span>🎬 Video Studio</span>
+        </button>
+      </div>
+
+      <div class="sidebar-subbar">
+        <span class="subbar-label">History & Chapters</span>
+        <span id="session-count-badge" class="badge">0</span>
+      </div>
+
+      <!-- History List -->
+      <div id="history-list" class="history-list">
+        <div class="history-empty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+          <p>No past narrations yet.</p>
+          <small>Generate an audiobook to save it here.</small>
+        </div>
+      </div>
+
+      <!-- System status indicator -->
+      <div class="sidebar-footer">
+        <div class="system-status">
+          <span id="engine-status-dot" class="status-dot"></span>
+          <span id="engine-status-text" class="status-text">Kokoro-82M Ready</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER WORKSPACE -->
+    <main class="center-workspace">
+      
+      <!-- MODE 1: NARRATOR VIEW -->
+      <div id="narration-view" class="view-panel">
+        <!-- Top Meta Bar -->
+        <header class="workspace-header">
+          <div class="title-input-wrapper">
+            <input type="text" id="project-title" class="title-input" placeholder="Untitled Audiobook / Chapter Name..." />
+          </div>
+          <div class="stats-pills">
+            <div class="stat-pill"><span id="stat-words">0</span> words</div>
+            <div class="stat-pill"><span id="stat-chars">0</span> chars</div>
+            <div class="stat-pill accent"><span id="stat-time">~0m</span> listening</div>
+          </div>
+        </header>
+
+        <!-- Text Input Area -->
+        <div class="editor-container">
+          <textarea id="book-text" class="editor-textarea" placeholder="Paste your book text or Markdown here (supports 12,000 to 20,000+ words).
+
+Markdown headers (###), bold (**text**), and bullets are automatically cleaned so they won't be pronounced!
+
+Drag & drop any .txt or .md file right here..."></textarea>
+        </div>
+
+        <!-- Live Generation Progress Card -->
+        <div id="progress-card" class="progress-card hidden">
+          <div class="progress-header">
+            <div class="progress-title">
+              <span class="pulse-indicator"></span>
+              <span id="progress-status-title">Generating Narration...</span>
+            </div>
+            <div class="progress-stats">
+              <span id="progress-chunk-info">Chunk 0 / 0</span>
+              <span class="stat-divider">•</span>
+              <span id="progress-eta">ETA: Calculating...</span>
+            </div>
+          </div>
+          <div class="progress-bar-track">
+            <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%;"></div>
+          </div>
+          <div class="progress-snippet-box">
+            <span class="snippet-label">Speaking:</span>
+            <span id="progress-snippet-text" class="snippet-text">Initializing voice model...</span>
+          </div>
+        </div>
+
+        <!-- Audio Player Deck -->
+        <div id="audio-deck" class="audio-deck hidden">
+          <div class="deck-top">
+            <div class="deck-meta">
+              <h3 id="deck-title" class="deck-title">Audiobook Ready</h3>
+              <p id="deck-subtitle" class="deck-subtitle">24 kHz • Kokoro-82M</p>
+            </div>
+            <div class="deck-actions">
+              <button id="btn-open-in-video-studio" class="btn btn-secondary btn-sm">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><polygon points="10 9 15 12 10 15 10 9"/></svg>
+                Create Video
+              </button>
+              <a id="btn-download-audio" href="#" download="audiobook.wav" class="btn btn-primary btn-sm">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download (.wav)
+              </a>
+            </div>
+          </div>
+          <audio id="main-audio-player" controls class="native-audio-player"></audio>
+        </div>
+
+        <!-- Bottom Toolbar -->
+        <footer class="workspace-footer">
+          <div class="footer-left">
+            <label class="btn btn-secondary btn-sm file-upload-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Load File (.txt / .md)
+              <input type="file" id="file-uploader" accept=".txt,.md,.text" style="display: none;" />
+            </label>
+            <button id="btn-clear-text" class="btn btn-ghost btn-sm">Clear Text</button>
+          </div>
+
+          <div class="footer-right">
+            <button id="btn-generate" class="btn btn-primary btn-lg">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span id="btn-generate-label">Generate Narration</span>
+            </button>
+          </div>
+        </footer>
+      </div>
+
+      <!-- MODE 2: YOUTUBE VIDEO STUDIO VIEW -->
+      <div id="video-studio-view" class="view-panel hidden">
+        <header class="workspace-header">
+          <div class="title-input-wrapper">
+            <span class="video-studio-badge">🎬 Video Studio</span>
+            <span id="video-project-name" class="video-title-label">Select or generate an audio to begin</span>
+          </div>
+          <div class="stats-pills">
+            <label class="btn btn-secondary btn-sm file-upload-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+              Upload Image
+              <input type="file" id="bg-image-uploader" accept="image/*" style="display: none;" />
+            </label>
+            <button id="btn-sample-template" class="btn btn-ghost btn-sm">Use Book Mockup</button>
+          </div>
+        </header>
+
+        <!-- Video Canvas Workspace -->
+        <div class="video-stage-container">
+          <div id="canvas-container" class="canvas-container">
+            <canvas id="video-canvas" width="1920" height="1080"></canvas>
+            
+            <!-- Draggable Caption Box Indicator -->
+            <div id="caption-box" class="caption-draggable-box">
+              <div class="caption-box-header">
+                <span class="caption-box-tag">⠿ Drag Captions Here</span>
+              </div>
+              <div id="caption-preview-text" class="caption-preview-content">
+                let me say that again your emotions are not your friend
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Video Bottom Controls -->
+        <footer class="video-footer">
+          <div class="video-transport-controls">
+            <button id="btn-video-play" class="btn btn-primary btn-sm btn-icon-only" title="Play / Pause">
+              <svg id="video-play-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+            
+            <div class="video-scrub-wrapper">
+              <input type="range" id="video-scrubber" min="0" max="100" value="0" step="0.1" class="form-range" />
+            </div>
+
+            <span id="video-timecode" class="timecode-label">00:00 / 00:00</span>
+          </div>
+
+          <div class="video-export-actions">
+            <button id="btn-export-mp4" class="btn btn-success btn-lg">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span id="export-btn-label">Export MP4 Video</span>
+            </button>
+          </div>
+        </footer>
+      </div>
+
+    </main>
+
+    <!-- RIGHT SIDEBAR: Settings -->
+    <aside class="sidebar right-sidebar">
+      
+      <!-- TAB 1 SETTINGS: Voice & Narration -->
+      <div id="panel-voice-settings" class="settings-subview">
+        <div class="sidebar-header">
+          <span class="sidebar-heading">Voice & Narration Settings</span>
+        </div>
+
+        <div class="settings-scroll-area">
+          <!-- Engine Selector Tabs -->
+          <div class="setting-group">
+            <label class="setting-label">Synthesis Engine</label>
+            <div class="engine-tabs">
+              <button class="engine-tab active" data-engine="local">
+                <span class="tab-icon">💻</span>
+                <span class="tab-title">Local (Kokoro)</span>
+              </button>
+              <button class="engine-tab" data-engine="deployed">
+                <span class="tab-icon">⚡</span>
+                <span class="tab-title">Deployed (RunPod)</span>
+              </button>
+              <button class="engine-tab" data-engine="cloud_api">
+                <span class="tab-icon">🔑</span>
+                <span class="tab-title">Cloud API</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Voice Picker -->
+          <div class="setting-group">
+            <div class="label-with-action">
+              <label class="setting-label" for="voice-select">Narrator Voice</label>
+              <button id="btn-preview-voice" class="btn-text-action">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Play Sample</span>
+              </button>
+            </div>
+            <select id="voice-select" class="form-select"></select>
+            <p id="voice-desc" class="setting-hint">Warm, expressive narrative tone</p>
+          </div>
+
+          <!-- Audio Speed -->
+          <div class="setting-group">
+            <div class="slider-header">
+              <label class="setting-label" for="speed-slider">Narration Speed</label>
+              <span id="speed-val" class="slider-val">1.0x</span>
+            </div>
+            <input type="range" id="speed-slider" min="0.6" max="1.8" step="0.05" value="1.0" class="form-range" />
+            <div class="slider-ticks">
+              <span>0.75x</span>
+              <span>1.0x</span>
+              <span>1.25x</span>
+              <span>1.5x</span>
+            </div>
+          </div>
+
+          <!-- Pacing & Breathing Pauses -->
+          <div class="setting-group">
+            <label class="setting-label">Natural Breathing & Pacing</label>
+            <div class="sub-slider-item">
+              <div class="sub-slider-header">
+                <span>Paragraph Pause</span>
+                <span id="pause-para-val" class="slider-val">0.6s</span>
+              </div>
+              <input type="range" id="pause-para-slider" min="0.2" max="1.5" step="0.1" value="0.6" class="form-range" />
+            </div>
+
+            <div class="sub-slider-item">
+              <div class="sub-slider-header">
+                <span>Sentence Pause</span>
+                <span id="pause-sent-val" class="slider-val">0.25s</span>
+              </div>
+              <input type="range" id="pause-sent-slider" min="0.1" max="0.8" step="0.05" value="0.25" class="form-range" />
+            </div>
+          </div>
+
+          <!-- Deployed (RunPod) Panel -->
+          <div id="panel-deployed-settings" class="engine-subpanel hidden">
+            <div class="divider"></div>
+            <span class="subpanel-title">RunPod / Breeze Configuration</span>
+            
+            <div class="setting-group">
+              <label class="setting-label" for="deployed-endpoint">Endpoint URL</label>
+              <input type="text" id="deployed-endpoint" class="form-input" placeholder="https://xxxx-7860.proxy.runpod.net" />
+            </div>
+
+            <div class="setting-group">
+              <label class="setting-label" for="deployed-token">Bearer Token (Optional)</label>
+              <input type="password" id="deployed-token" class="form-input" placeholder="Bearer token" />
+            </div>
+
+            <div class="setting-group">
+              <label class="setting-label" for="deployed-instruction">Voice Design Instruction</label>
+              <textarea id="deployed-instruction" class="form-textarea" rows="2" placeholder="e.g. A warm, thoughtful young woman with a calm delivery."></textarea>
+            </div>
+          </div>
+
+          <!-- Cloud API Panel -->
+          <div id="panel-cloud-settings" class="engine-subpanel hidden">
+            <div class="divider"></div>
+            <span class="subpanel-title">Cloud API Configuration</span>
+
+            <div class="setting-group">
+              <label class="setting-label" for="cloud-provider">API Provider</label>
+              <select id="cloud-provider" class="form-select">
+                <option value="openai">OpenAI (TTS-1 / TTS-1-HD)</option>
+                <option value="elevenlabs">ElevenLabs</option>
+                <option value="breezeblue">BreezeBlue API</option>
+              </select>
+            </div>
+
+            <div class="setting-group">
+              <label class="setting-label" for="cloud-api-key">API Key</label>
+              <input type="password" id="cloud-api-key" class="form-input" placeholder="sk-..." />
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- TAB 2 SETTINGS: Video & Caption Customization -->
+      <div id="panel-video-settings" class="settings-subview hidden">
+        <div class="sidebar-header">
+          <span class="sidebar-heading">Video & Caption Design</span>
+        </div>
+
+        <div class="settings-scroll-area">
+          <!-- Font Family -->
+          <div class="setting-group">
+            <label class="setting-label" for="caption-font-select">Caption Font</label>
+            <select id="caption-font-select" class="form-select">
+              <option value="'Merriweather', serif" selected>Merriweather (Classic Book Serif)</option>
+              <option value="'Playfair Display', serif">Playfair Display (Elegant Literary)</option>
+              <option value="'Cinzel', serif">Cinzel (Philosophy & Antique)</option>
+              <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans (Modern Clean)</option>
+              <option value="'Inter', sans-serif">Inter (Punchy Neutral)</option>
+            </select>
+          </div>
+
+          <!-- Font Size -->
+          <div class="setting-group">
+            <div class="slider-header">
+              <label class="setting-label" for="caption-size-slider">Font Size</label>
+              <span id="caption-size-val" class="slider-val">54px</span>
+            </div>
+            <input type="range" id="caption-size-slider" min="28" max="96" step="2" value="54" class="form-range" />
+          </div>
+
+          <!-- Font Color & Style -->
+          <div class="setting-group">
+            <div class="slider-header">
+              <label class="setting-label">Font Color</label>
+              <input type="color" id="caption-color-picker" value="#111827" class="color-picker-input" />
+            </div>
+            <div class="color-presets">
+              <button class="color-preset-btn" data-color="#111827" style="background: #111827;" title="Charcoal Black"></button>
+              <button class="color-preset-btn" data-color="#ffffff" style="background: #ffffff;" title="Pure White"></button>
+              <button class="color-preset-btn" data-color="#fef3c7" style="background: #fef3c7;" title="Warm Cream"></button>
+              <button class="color-preset-btn" data-color="#fbbf24" style="background: #fbbf24;" title="Gold Highlight"></button>
+            </div>
+          </div>
+
+          <!-- Text Casing & Alignment -->
+          <div class="setting-group">
+            <label class="setting-label">Text Case</label>
+            <div class="segmented-control">
+              <button class="segment-btn active" data-casing="lower">lowercase</button>
+              <button class="segment-btn" data-casing="normal">Normal</button>
+              <button class="segment-btn" data-casing="upper">UPPERCASE</button>
+            </div>
+          </div>
+
+          <!-- Text Weight -->
+          <div class="setting-group">
+            <label class="setting-label">Font Weight</label>
+            <div class="segmented-control">
+              <button class="segment-btn" data-weight="400">Regular</button>
+              <button class="segment-btn active" data-weight="700">Bold</button>
+              <button class="segment-btn" data-weight="900">Black</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Aesthetic Player Widget Toggle -->
+          <div class="setting-group">
+            <div class="checkbox-row">
+              <input type="checkbox" id="toggle-player-widget" checked class="form-checkbox" />
+              <label for="toggle-player-widget" class="checkbox-label">Overlay Aesthetic Audio Bar</label>
+            </div>
+            <small class="setting-hint">Draws the stylish timeline scrub bar and play/pause controls shown in podcast/book videos.</small>
+          </div>
+
+          <div id="player-widget-controls" class="setting-group">
+            <div class="slider-header">
+              <label class="setting-label" for="widget-y-slider">Widget Vertical Position</label>
+              <span id="widget-y-val" class="slider-val">68%</span>
+            </div>
+            <input type="range" id="widget-y-slider" min="40" max="90" step="1" value="68" class="form-range" />
+          </div>
+
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <audio id="preview-audio-player" style="display: none;"></audio>
+  <audio id="video-audio-player" style="display: none;"></audio>
+  <script src="/js/app.js"></script>
+</body>
+</html>

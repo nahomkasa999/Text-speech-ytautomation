@@ -1,0 +1,24 @@
+# Virtual Environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# PyInstaller & Build artifacts
+build/
+dist/
+
+# Model Weights (Auto-downloaded by setup / GitHub Actions)
+models/*.onnx
+models/*.bin
+
+# Generated outputs
+outputs/audio/*
+!outputs/audio/.gitkeep
+outputs/sessions.json
+
+# OS & Editor files
+.DS_Store
+*.swp
+.vscode/
+.idea/
