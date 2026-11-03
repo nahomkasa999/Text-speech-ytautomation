@@ -227,11 +227,15 @@ export class PanelManager {
 
     // Update Toggle Button Active States
     const btnLeft = document.getElementById('btn-toggle-left-panel');
+    const btnLeftNarrator = document.getElementById('btn-toggle-left-narrator');
     const btnRight = document.getElementById('btn-toggle-right-panel');
+    const btnRightNarrator = document.getElementById('btn-toggle-right-narrator');
     const btnTimeline = document.getElementById('btn-toggle-timeline');
 
     if (btnLeft) btnLeft.classList.toggle('active', !this.leftCollapsed);
+    if (btnLeftNarrator) btnLeftNarrator.classList.toggle('active', !this.leftCollapsed);
     if (btnRight) btnRight.classList.toggle('active', !this.rightCollapsed);
+    if (btnRightNarrator) btnRightNarrator.classList.toggle('active', !this.rightCollapsed);
     if (btnTimeline) btnTimeline.classList.toggle('active', !this.timelineCollapsed);
 
     // Re-fit canvas smoothly

@@ -188,17 +188,6 @@ Drag & drop any .txt or .md file right here..."></textarea>
           </div>
 
           <div class="top-bar-right">
-            <!-- Zoom Viewport Control -->
-            <div class="zoom-dropdown-wrap">
-              <select id="zoom-select" class="zoom-select" title="Zoom Viewport (Ctrl+0 to Fit, Ctrl+1 to 100%)">
-                <option value="fit">Fit</option>
-                <option value="50%">50%</option>
-                <option value="75%">75%</option>
-                <option value="100%">100%</option>
-                <option value="150%">150%</option>
-                <option value="200%">200%</option>
-              </select>
-            </div>
             <!-- Zen Mode Toggle -->
             <button id="btn-zen-mode" class="panel-toggle-btn" title="Zen Mode (Ctrl+K Z / F11)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -446,9 +435,13 @@ Drag & drop any .txt or .md file right here..."></textarea>
           <div id="custom-text-editor-group" class="setting-group hidden">
             <label class="setting-label" for="layer-content-input">Text Content</label>
             <input type="text" id="layer-content-input" class="form-input" placeholder="Enter text..." />
+            <button id="btn-delete-layer" class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 8px; color: var(--accent-danger); display: flex; align-items: center; justify-content: center; gap: 6px;" title="Delete selected text layer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>Delete Layer</span>
+            </button>
           </div>
 
-          <!-- Figma Frame Coordinates (X, Y, Width in Numbers) -->
+          <!-- Figma Frame Coordinates (X, Y, Width, Height) -->
           <div class="setting-group">
             <label class="setting-label">Frame Position & Size</label>
             <div class="figma-grid-2">
@@ -467,7 +460,8 @@ Drag & drop any .txt or .md file right here..."></textarea>
                 <input type="number" id="prop-size-w" class="form-input-num" value="920" step="20" />
               </div>
               <div class="num-input-wrap">
-                <button id="btn-delete-layer" class="btn btn-secondary btn-sm" style="width: 100%; color: var(--accent-danger);" title="Delete selected layer">Delete</button>
+                <span class="num-prefix">H</span>
+                <input type="number" id="prop-size-h" class="form-input-num" value="120" step="10" />
               </div>
             </div>
           </div>

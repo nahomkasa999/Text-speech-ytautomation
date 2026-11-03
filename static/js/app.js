@@ -19,6 +19,34 @@ document.addEventListener('DOMContentLoaded', () => {
     duration: 10
   });
 
+  // Non-blocking Toast Notification (No native alert() calls)
+  const showToast = (message, type = 'info') => {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.className = 'toast-container';
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast-item toast-${type}`;
+    const iconSvg = type === 'error'
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`
+      : (type === 'success'
+        ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`
+        : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`);
+
+    toast.innerHTML = `<span class="toast-icon">${iconSvg}</span><span class="toast-text">${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('toast-show'), 10);
+    setTimeout(() => {
+      toast.classList.remove('toast-show');
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, 3500);
+  };
+
   // Default Layers
   const defaultCaptionLayer = new TranscriptionLayer({
     id: 'layer_captions',
@@ -168,6 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     propPosX: document.getElementById('prop-pos-x'),
     propPosY: document.getElementById('prop-pos-y'),
     propSizeW: document.getElementById('prop-size-w'),
+    propSizeH: document.getElementById('prop-size-h'),
     btnDeleteLayer: document.getElementById('btn-delete-layer'),
     typographySettingsGroup: document.getElementById('typography-settings-group'),
     captionFontSelect: document.getElementById('caption-font-select'),
@@ -466,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // FIGMA MULTI-LAYER ENGINE
   // =========================================================
   const getSelectedLayer = () => {
-    return scene.getSelectedLayer() || scene.layers[0];
+    return scene.getSelectedLayer();
   };
 
   const renderLayersList = () => {
@@ -495,6 +524,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const l = getSelectedLayer();
     if (!l) {
       el.figmaSelectionBox.classList.add('hidden');
+      el.customTextEditorGroup.classList.add('hidden');
+      el.propPosX.value = '';
+      el.propPosY.value = '';
+      el.propSizeW.value = '';
+      if (el.propSizeH) el.propSizeH.value = '';
+      el.selectionTagName.textContent = '';
       return;
     }
 
@@ -502,17 +537,15 @@ document.addEventListener('DOMContentLoaded', () => {
     el.propPosX.value = Math.round(l.x);
     el.propPosY.value = Math.round(l.y);
     el.propSizeW.value = Math.round(l.width);
+    if (el.propSizeH) el.propSizeH.value = Math.round(l.height || 40);
 
-    // Is it a custom text layer? Show content input
+    // Is it a custom text layer? Show content input and delete button
     if (l.type === 'text') {
       el.customTextEditorGroup.classList.remove('hidden');
-      el.layerContentInput.value = l.text || 'Text Layer';
-      el.btnDeleteLayer.disabled = false;
-      el.btnDeleteLayer.style.display = 'block';
+      el.layerContentInput.value = l.text || '';
     } else {
+      // Core Synced Captions and Player Widget have NO delete button and NO custom text input
       el.customTextEditorGroup.classList.add('hidden');
-      // Do not allow deleting core captions or player bar
-      el.btnDeleteLayer.style.display = (l.type === 'transcription' || l.type === 'audio_widget') ? 'none' : 'block';
     }
 
     if (l.type === 'audio_widget') {
@@ -549,8 +582,9 @@ document.addEventListener('DOMContentLoaded', () => {
       name: `Text ${count}`,
       text: 'Subtitle Heading',
       x: 880,
-      y: 120 + count * 60,
-      width: 900,
+      y: 380,
+      width: 850,
+      height: 80,
       fontFamily: "'Playfair Display', serif",
       fontSize: 44,
       fontWeight: '700',
@@ -562,6 +596,15 @@ document.addEventListener('DOMContentLoaded', () => {
       selectLayer(newId);
     }));
     selectLayer(newId);
+
+    // Auto-focus and highlight the text input in inspector
+    setTimeout(() => {
+      if (el.layerContentInput) {
+        el.layerContentInput.focus();
+        el.layerContentInput.select();
+      }
+    }, 60);
+
     debouncedSaveDraft();
   });
 
@@ -576,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Delete Layer
+  // Delete Layer (Only applies to custom text layers)
   el.btnDeleteLayer.addEventListener('click', () => {
     const l = getSelectedLayer();
     if (l && l.type === 'text') {
@@ -636,6 +679,18 @@ document.addEventListener('DOMContentLoaded', () => {
       debouncedSaveDraft();
     }
   });
+
+  if (el.propSizeH) {
+    el.propSizeH.addEventListener('input', (e) => {
+      const l = getSelectedLayer();
+      if (l) {
+        l.height = Math.max(20, Math.min(1080, parseInt(e.target.value) || 40));
+        interactionMgr.updateSelectionBox();
+        renderVideoFrame();
+        debouncedSaveDraft();
+      }
+    });
+  }
 
   // Typography Inputs
   el.captionSizeNum.addEventListener('input', (e) => {
@@ -864,7 +919,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Transport Controls
   const toggleVideoPlay = () => {
     if (!el.videoAudioPlayer.src) {
-      alert('Please select or generate a narration project first.');
+      showToast('Please select or generate a narration project first.', 'error');
       return;
     }
 
@@ -882,7 +937,7 @@ document.addEventListener('DOMContentLoaded', () => {
           requestAnimationFrame(capcutAnimationLoop);
         }).catch(err => {
           console.error("Audio playback error:", err);
-          alert("Audio error: Click on the page or select a chapter to enable audio playback.");
+          showToast("Audio error: Click on the page or select a chapter to enable audio playback.", 'error');
         });
       }
     }
@@ -942,7 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // MP4 Video Exporter
   el.btnExportMp4.addEventListener('click', async () => {
     if (!el.videoAudioPlayer.src) {
-      alert('Please load an audio project first.');
+      showToast('Please load an audio project first.', 'error');
       return;
     }
 
@@ -1001,7 +1056,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.video.isExporting = false;
         exportAudio.pause();
         audioCtx.close().catch(() => {});
-        alert(`Video successfully exported as ${filename}.${ext}!`);
+        showToast(`Video successfully exported as ${filename}.${ext}!`, 'success');
       };
 
       recorder.start();
@@ -1025,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', () => {
         recorder.stop();
       };
     } catch (err) {
-      alert(`Export error: ${err.message}`);
+      showToast(`Export error: ${err.message}`, 'error');
       el.figmaSelectionBox.classList.remove('hidden');
       el.btnExportMp4.disabled = false;
       el.exportBtnLabel.textContent = 'Export MP4';
@@ -1226,7 +1281,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el.btnGenerate.addEventListener('click', async () => {
     const text = el.bookText.value.trim();
     if (!text) {
-      alert('Please enter or paste book text to narrate.');
+      showToast('Please enter or paste book text to narrate.', 'error');
       return;
     }
 
@@ -1302,7 +1357,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     } catch (err) {
-      alert(`Generation failed: ${err.message}`);
+      showToast(`Generation failed: ${err.message}`, 'error');
       el.progressCard.classList.add('hidden');
     } finally {
       state.isGenerating = false;
@@ -1374,7 +1429,7 @@ document.addEventListener('DOMContentLoaded', () => {
         el.previewAudioPlayer.play();
       }
     } catch (err) {
-      alert(`Preview error: ${err.message}`);
+      showToast(`Preview error: ${err.message}`, 'error');
     } finally {
       el.btnPreviewVoice.disabled = false;
       txt.textContent = orig;

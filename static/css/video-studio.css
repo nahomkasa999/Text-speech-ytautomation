@@ -111,41 +111,40 @@
 }
 
 /* ======================================================== */
-/* CANVAS VIEWPORT & PASTEBOARD                             */
+/* CANVAS STAGE & STATIC CENTERED 16:9 CONTAINER            */
 /* ======================================================== */
 
 .video-stage-container {
   flex: 1;
-  position: relative;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
   background: #141414; /* Deep dark pasteboard around canvas */
+  overflow: hidden;
+  position: relative;
   user-select: none;
 }
 
-.canvas-viewport-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  transform-origin: 0 0;
-}
-
 .canvas-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1920px;
-  height: 1080px;
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 16 / 9;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+  border-radius: var(--radius-panel);
   background: #C85A32;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-  transform-origin: 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
 }
 
 #video-canvas {
-  width: 1920px;
-  height: 1080px;
+  width: 100%;
+  height: 100%;
   display: block;
+  border-radius: var(--radius-panel);
 }
 
 /* Overlay canvas for smart guides & distance labels */
@@ -153,8 +152,8 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 1920px;
-  height: 1080px;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
   z-index: 20;
 }
@@ -321,4 +320,60 @@ body.zen-mode .panel-resizer {
 
 .zen-exit-btn:hover {
   background: var(--bg-hover);
+}
+
+/* ======================================================== */
+/* NON-BLOCKING TOAST NOTIFICATIONS                         */
+/* ======================================================== */
+
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-surface-raised, #2C2C2C);
+  border: 1px solid var(--border-subtle, #444444);
+  color: var(--text-primary, #FFFFFF);
+  padding: 8px 14px;
+  border-radius: var(--radius-input, 4px);
+  font-size: 12px;
+  font-family: var(--font-ui, Inter, sans-serif);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-item.toast-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-item.toast-error {
+  border-color: rgba(242, 72, 34, 0.5);
+  background: #2A1A1A;
+  color: #FFAAA0;
+}
+
+.toast-item.toast-success {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: #1A281E;
+  color: #86EFAC;
+}
+
+.toast-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }

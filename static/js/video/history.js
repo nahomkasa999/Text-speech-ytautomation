@@ -54,12 +54,12 @@ export class AddLayerCommand extends Command {
 }
 
 export class RemoveLayerCommand extends Command {
-  constructor(scene, layerId, onUpdate = null) {
-    const layer = scene.getLayer(layerId);
+  constructor(scene, layerOrId, onUpdate = null) {
+    const layer = typeof layerOrId === 'string' ? scene.getLayer(layerOrId) : layerOrId;
     super(`Delete ${layer?.name || 'Layer'}`);
     this.scene = scene;
     this.layer = layer;
-    this.index = scene.layers.findIndex(l => l.id === layerId);
+    this.index = layer ? scene.layers.findIndex(l => l.id === layer.id) : -1;
     this.onUpdate = onUpdate;
   }
 
