@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@600;700&family=Inter:wght@400;600;700&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-container">
@@ -119,7 +119,7 @@ Drag & drop any .txt or .md file right here..."></textarea>
             <div class="deck-actions">
               <button id="btn-open-in-video-studio" class="btn btn-secondary btn-sm">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><polygon points="10 9 15 12 10 15 10 9"/></svg>
-                Create Video
+                Open in Video Studio
               </button>
               <a id="btn-download-audio" href="#" download="audiobook.wav" class="btn btn-primary btn-sm">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -150,69 +150,124 @@ Drag & drop any .txt or .md file right here..."></textarea>
         </footer>
       </div>
 
-      <!-- MODE 2: YOUTUBE VIDEO STUDIO VIEW -->
+      <!-- MODE 2: CAPCUT & FIGMA STYLE VIDEO STUDIO -->
       <div id="video-studio-view" class="view-panel hidden">
-        <header class="workspace-header">
-          <div class="title-input-wrapper">
-            <span class="video-studio-badge">🎬 Video Studio</span>
-            <span id="video-project-name" class="video-title-label">Select or generate an audio to begin</span>
-          </div>
-          <div class="stats-pills">
-            <label class="btn btn-secondary btn-sm file-upload-btn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-              Upload Image
+        <!-- Top Video Studio Action Bar (Figma / CapCut Top Bar) -->
+        <header class="workspace-header video-top-bar">
+          <div class="top-bar-tools">
+            <button id="btn-add-text-layer" class="tool-btn" title="Add Text Layer (T)">
+              <span class="tool-icon">T</span>
+              <span>Add Text</span>
+            </button>
+            <div class="tool-divider"></div>
+            <label class="tool-btn file-upload-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+              <span>Image</span>
               <input type="file" id="bg-image-uploader" accept="image/*" style="display: none;" />
             </label>
-            <button id="btn-sample-template" class="btn btn-ghost btn-sm">Use Book Mockup</button>
+            <button id="btn-sample-template" class="tool-btn">
+              <span>Book Mockup</span>
+            </button>
+          </div>
+
+          <div class="title-input-wrapper">
+            <span class="project-pill" id="video-project-name">Untitled Project</span>
+          </div>
+
+          <div class="top-bar-right">
+            <button id="btn-export-mp4" class="btn btn-success btn-sm">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span id="export-btn-label">Export MP4</span>
+            </button>
           </div>
         </header>
 
-        <!-- Video Canvas Workspace -->
+        <!-- Canvas Viewport (Figma-style Stage with clean selection boxes) -->
         <div class="video-stage-container">
           <div id="canvas-container" class="canvas-container">
             <canvas id="video-canvas" width="1920" height="1080"></canvas>
             
-            <!-- Draggable Caption Box Indicator -->
-            <div id="caption-box" class="caption-draggable-box">
-              <div class="caption-box-header">
-                <span class="caption-box-tag">⠿ Drag Captions Here</span>
-              </div>
-              <div id="caption-preview-text" class="caption-preview-content">
-                let me say that again your emotions are not your friend
-              </div>
+            <!-- Figma Selection Bounding Box (NO duplicate text inside!) -->
+            <div id="figma-selection-box" class="figma-selection-box hidden">
+              <div class="selection-tag" id="selection-tag-name">Captions Frame</div>
+              <div class="handle nw"></div>
+              <div class="handle ne"></div>
+              <div class="handle sw"></div>
+              <div class="handle se"></div>
             </div>
           </div>
         </div>
 
-        <!-- Video Bottom Controls -->
-        <footer class="video-footer">
-          <div class="video-transport-controls">
-            <button id="btn-video-play" class="btn btn-primary btn-sm btn-icon-only" title="Play / Pause">
-              <svg id="video-play-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            </button>
-            
-            <div class="video-scrub-wrapper">
-              <input type="range" id="video-scrubber" min="0" max="100" value="0" step="0.1" class="form-range" />
+        <!-- CAPCUT-STYLE BOTTOM TIMELINE -->
+        <div class="capcut-timeline-container">
+          <!-- Timeline Transport & Speed Bar -->
+          <div class="timeline-toolbar">
+            <div class="transport-left">
+              <button id="btn-video-play" class="transport-btn play-btn" title="Play / Pause (Space)">
+                <svg id="video-play-svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+              <button id="btn-video-stop" class="transport-btn" title="Return to Start">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+              </button>
+              <span id="video-timecode" class="timeline-timecode">00:00.0 / 00:00.0</span>
             </div>
 
-            <span id="video-timecode" class="timecode-label">00:00 / 00:00</span>
+            <!-- CapCut Audio Speed Control -->
+            <div class="speed-control-deck">
+              <span class="speed-label">⚡ Audio Speed:</span>
+              <div class="speed-buttons">
+                <button class="speed-btn" data-speed="0.8">0.8x</button>
+                <button class="speed-btn active" data-speed="1.0">1.0x</button>
+                <button class="speed-btn" data-speed="1.2">1.2x</button>
+                <button class="speed-btn" data-speed="1.5">1.5x</button>
+              </div>
+            </div>
           </div>
 
-          <div class="video-export-actions">
-            <button id="btn-export-mp4" class="btn btn-success btn-lg">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span id="export-btn-label">Export MP4 Video</span>
-            </button>
+          <!-- Multi-Track Timeline Stage -->
+          <div class="timeline-viewport" id="timeline-viewport">
+            <!-- Time Ruler -->
+            <div class="timeline-ruler" id="timeline-ruler">
+              <!-- Ruler ticks rendered dynamically -->
+            </div>
+
+            <!-- Tracks Container -->
+            <div class="timeline-tracks" id="timeline-tracks">
+              <!-- Track 1: Captions & Text Layers -->
+              <div class="timeline-track text-track" id="track-subtitles">
+                <div class="track-header"><span class="track-icon">T</span> Captions</div>
+                <div class="track-lane" id="lane-subtitles">
+                  <!-- Dynamic subtitle block chunks -->
+                </div>
+              </div>
+
+              <!-- Track 2: Audio Track with Waveform Simulation -->
+              <div class="timeline-track audio-track" id="track-audio">
+                <div class="track-header"><span class="track-icon">🎵</span> Audio</div>
+                <div class="track-lane" id="lane-audio">
+                  <div class="audio-block" id="timeline-audio-block">
+                    <div class="waveform-ribs" id="waveform-ribs"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Red Playhead Needle -->
+            <div class="timeline-playhead" id="timeline-playhead">
+              <div class="playhead-head"></div>
+              <div class="playhead-line"></div>
+            </div>
           </div>
-        </footer>
+        </div>
+
       </div>
 
     </main>
 
-    <!-- RIGHT SIDEBAR: Settings -->
+    <!-- RIGHT SIDEBAR: Settings & Figma Property Inspector -->
     <aside class="sidebar right-sidebar">
       
-      <!-- TAB 1 SETTINGS: Voice & Narration -->
+      <!-- TAB 1 SETTINGS: Voice & Narration (Active in Narrator Mode) -->
       <div id="panel-voice-settings" class="settings-subview">
         <div class="sidebar-header">
           <span class="sidebar-heading">Voice & Narration Settings</span>
@@ -330,41 +385,80 @@ Drag & drop any .txt or .md file right here..."></textarea>
         </div>
       </div>
 
-      <!-- TAB 2 SETTINGS: Video & Caption Customization -->
+      <!-- TAB 2 SETTINGS: FIGMA-STYLE FRAME & PROPERTY INSPECTOR (Active in Video Mode) -->
       <div id="panel-video-settings" class="settings-subview hidden">
         <div class="sidebar-header">
-          <span class="sidebar-heading">Video & Caption Design</span>
+          <span class="sidebar-heading">Layer Properties</span>
         </div>
 
         <div class="settings-scroll-area">
-          <!-- Font Family -->
+          
+          <!-- Layer Selector List -->
           <div class="setting-group">
-            <label class="setting-label" for="caption-font-select">Caption Font</label>
+            <label class="setting-label">Selected Layer</label>
+            <div id="layers-list" class="layers-stack">
+              <!-- Dynamically populated: Captions layer, custom text layers, player bar -->
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Custom Text Editor (if custom text layer selected) -->
+          <div id="custom-text-editor-group" class="setting-group hidden">
+            <label class="setting-label" for="layer-content-input">Text Content</label>
+            <input type="text" id="layer-content-input" class="form-input" placeholder="Enter text..." />
+          </div>
+
+          <!-- Figma Frame Coordinates (X, Y, Width in Numbers) -->
+          <div class="setting-group">
+            <label class="setting-label">Frame Position & Size</label>
+            <div class="figma-grid-2">
+              <div class="num-input-wrap">
+                <span class="num-prefix">X</span>
+                <input type="number" id="prop-pos-x" class="form-input-num" value="900" step="10" />
+              </div>
+              <div class="num-input-wrap">
+                <span class="num-prefix">Y</span>
+                <input type="number" id="prop-pos-y" class="form-input-num" value="240" step="10" />
+              </div>
+            </div>
+            <div class="figma-grid-2" style="margin-top: 6px;">
+              <div class="num-input-wrap">
+                <span class="num-prefix">W</span>
+                <input type="number" id="prop-size-w" class="form-input-num" value="920" step="20" />
+              </div>
+              <div class="num-input-wrap">
+                <button id="btn-delete-layer" class="btn btn-secondary btn-sm" style="width: 100%; color: var(--accent-danger);" title="Delete selected layer">Delete</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Typography Settings -->
+          <div class="setting-group" id="typography-settings-group">
+            <label class="setting-label" for="caption-font-select">Font Family</label>
             <select id="caption-font-select" class="form-select">
-              <option value="'Merriweather', serif" selected>Merriweather (Classic Book Serif)</option>
-              <option value="'Playfair Display', serif">Playfair Display (Elegant Literary)</option>
-              <option value="'Cinzel', serif">Cinzel (Philosophy & Antique)</option>
-              <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans (Modern Clean)</option>
+              <option value="'Merriweather', serif" selected>Merriweather (Classic Serif)</option>
+              <option value="'Playfair Display', serif">Playfair Display (Literary Elegance)</option>
+              <option value="'Cinzel', serif">Cinzel (Antique & Philosophy)</option>
+              <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans (Clean Modern)</option>
               <option value="'Inter', sans-serif">Inter (Punchy Neutral)</option>
+              <option value="'Oswald', sans-serif">Oswald (Bold Display)</option>
             </select>
-          </div>
 
-          <!-- Font Size -->
-          <div class="setting-group">
-            <div class="slider-header">
-              <label class="setting-label" for="caption-size-slider">Font Size</label>
-              <span id="caption-size-val" class="slider-val">54px</span>
+            <!-- Number input for Font Size -->
+            <div class="figma-grid-2" style="margin-top: 8px;">
+              <div class="num-input-wrap">
+                <span class="num-prefix">Size</span>
+                <input type="number" id="caption-size-num" class="form-input-num" min="16" max="140" value="54" />
+              </div>
+              <div class="num-input-wrap">
+                <span class="num-prefix">Color</span>
+                <input type="color" id="caption-color-picker" value="#111827" class="color-picker-input-bar" />
+              </div>
             </div>
-            <input type="range" id="caption-size-slider" min="28" max="96" step="2" value="54" class="form-range" />
-          </div>
 
-          <!-- Font Color & Style -->
-          <div class="setting-group">
-            <div class="slider-header">
-              <label class="setting-label">Font Color</label>
-              <input type="color" id="caption-color-picker" value="#111827" class="color-picker-input" />
-            </div>
-            <div class="color-presets">
+            <!-- Quick Color Presets -->
+            <div class="color-presets" style="margin-top: 6px;">
               <button class="color-preset-btn" data-color="#111827" style="background: #111827;" title="Charcoal Black"></button>
               <button class="color-preset-btn" data-color="#ffffff" style="background: #ffffff;" title="Pure White"></button>
               <button class="color-preset-btn" data-color="#fef3c7" style="background: #fef3c7;" title="Warm Cream"></button>
@@ -372,18 +466,33 @@ Drag & drop any .txt or .md file right here..."></textarea>
             </div>
           </div>
 
-          <!-- Text Casing & Alignment -->
-          <div class="setting-group">
+          <!-- Text Alignments (Left, Center, Right) -->
+          <div class="setting-group" id="alignment-settings-group">
+            <label class="setting-label">Text Alignment</label>
+            <div class="segmented-control" id="align-control">
+              <button class="segment-btn active" data-align="left" title="Align Left">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/></svg>
+              </button>
+              <button class="segment-btn" data-align="center" title="Align Center">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="5" y1="18" x2="19" y2="18"/></svg>
+              </button>
+              <button class="segment-btn" data-align="right" title="Align Right">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="6" y1="18" x2="20" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Text Casing & Font Weight -->
+          <div class="setting-group" id="casing-settings-group">
             <label class="setting-label">Text Case</label>
             <div class="segmented-control">
               <button class="segment-btn active" data-casing="lower">lowercase</button>
               <button class="segment-btn" data-casing="normal">Normal</button>
-              <button class="segment-btn" data-casing="upper">UPPERCASE</button>
+              <button class="segment-btn" data-casing="upper">UPPER</button>
             </div>
           </div>
 
-          <!-- Text Weight -->
-          <div class="setting-group">
+          <div class="setting-group" id="weight-settings-group">
             <label class="setting-label">Font Weight</label>
             <div class="segmented-control">
               <button class="segment-btn" data-weight="400">Regular</button>
@@ -398,17 +507,8 @@ Drag & drop any .txt or .md file right here..."></textarea>
           <div class="setting-group">
             <div class="checkbox-row">
               <input type="checkbox" id="toggle-player-widget" checked class="form-checkbox" />
-              <label for="toggle-player-widget" class="checkbox-label">Overlay Aesthetic Audio Bar</label>
+              <label for="toggle-player-widget" class="checkbox-label">Aesthetic Audio Bar Widget</label>
             </div>
-            <small class="setting-hint">Draws the stylish timeline scrub bar and play/pause controls shown in podcast/book videos.</small>
-          </div>
-
-          <div id="player-widget-controls" class="setting-group">
-            <div class="slider-header">
-              <label class="setting-label" for="widget-y-slider">Widget Vertical Position</label>
-              <span id="widget-y-val" class="slider-val">68%</span>
-            </div>
-            <input type="range" id="widget-y-slider" min="40" max="90" step="1" value="68" class="form-range" />
           </div>
 
         </div>
