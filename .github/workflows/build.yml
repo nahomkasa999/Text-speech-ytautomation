@@ -1,8 +1,6 @@
 name: Build Standalone Desktop Apps (Windows & Linux)
 
 on:
-  push:
-    branches: [ main, master ]
   workflow_dispatch:
     inputs:
       app_name:

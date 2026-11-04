@@ -37,13 +37,18 @@ if getattr(sys, 'frozen', False):
     # Store outputs in working directory next to the executable
     APP_DATA_DIR = os.path.dirname(sys.executable)
     AUDIO_DIR = os.path.join(APP_DATA_DIR, "outputs", "audio")
+    IMAGES_DIR = os.path.join(APP_DATA_DIR, "outputs", "images")
     BASE_DIR = APP_DATA_DIR
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     MODELS_DIR = os.path.join(BASE_DIR, "models")
     STATIC_DIR = os.path.join(BASE_DIR, "static")
     AUDIO_DIR = os.path.join(BASE_DIR, "outputs", "audio")
+    IMAGES_DIR = os.path.join(BASE_DIR, "outputs", "images")
     APP_DATA_DIR = BASE_DIR
+
+os.makedirs(IMAGES_DIR, exist_ok=True)
+os.makedirs(AUDIO_DIR, exist_ok=True)
 
 app = FastAPI(title="AI Book Narrator Studio")
 
@@ -67,7 +72,9 @@ class DraftModel(BaseModel):
     paragraph_pause: Optional[float] = 0.6
     sentence_pause: Optional[float] = 0.25
     audio_speed: Optional[float] = 1.0
+    audio_volume: Optional[float] = 1.0
     layers: Optional[Any] = None
+    bg_image: Optional[str] = None
 
 @app.get("/api/draft")
 def get_draft():
@@ -87,6 +94,43 @@ def save_draft(draft: DraftModel):
     with open(draft_path, "w", encoding="utf-8") as f:
         json.dump(draft.model_dump(), f, ensure_ascii=False, indent=2)
     return {"status": "saved"}
+
+class ImageUploadModel(BaseModel):
+    data_url: str
+
+@app.post("/api/upload-image")
+def upload_image(req: ImageUploadModel):
+    if not req.data_url:
+        raise HTTPException(status_code=400, detail="No image provided")
+    import base64
+    header, _, encoded = req.data_url.partition(",")
+    content = base64.b64decode(encoded if encoded else req.data_url)
+    ext = ".png"
+    if "jpeg" in header or "jpg" in header:
+        ext = ".jpg"
+    elif "webp" in header:
+        ext = ".webp"
+    elif "svg" in header:
+        ext = ".svg"
+    filename = f"cover_{int(time.time())}_{os.urandom(2).hex()}{ext}"
+    target_path = os.path.join(IMAGES_DIR, filename)
+    with open(target_path, "wb") as f:
+        f.write(content)
+    return {"url": f"/images/{filename}"}
+
+@app.api_route("/images/{filename}", methods=["GET", "HEAD"])
+def serve_image(filename: str):
+    path = os.path.join(IMAGES_DIR, filename)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    media_type = "image/png"
+    if filename.endswith(".jpg") or filename.endswith(".jpeg"):
+        media_type = "image/jpeg"
+    elif filename.endswith(".webp"):
+        media_type = "image/webp"
+    elif filename.endswith(".svg"):
+        media_type = "image/svg+xml"
+    return FileResponse(path, media_type=media_type)
 
 class GenerateRequest(BaseModel):
     title: Optional[str] = ""

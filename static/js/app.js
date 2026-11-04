@@ -87,8 +87,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Video Studio State
     video: {
       bgImage: null,
+      bgImageUrl: null,
       bgImageLoaded: false,
       audioSpeed: 1.0,
+      audioVolume: 1.0,
+      preservePitch: true,
+      isMuted: false,
+      lastVolume: 1.0,
       isPlaying: false,
       isExporting: false,
       selectedLayerId: 'layer_captions',
@@ -189,7 +194,22 @@ document.addEventListener('DOMContentLoaded', () => {
     laneSubtitles: document.getElementById('lane-subtitles'),
     timelineAudioBlock: document.getElementById('timeline-audio-block'),
     timelinePlayhead: document.getElementById('timeline-playhead'),
+    trackAudio: document.getElementById('track-audio'),
     speedBtns: document.querySelectorAll('.speed-btn'),
+
+    // CapCut Audio Adjustments (Sliders & Inputs)
+    btnAudioMute: document.getElementById('btn-audio-mute'),
+    svgAudioVol: document.getElementById('svg-audio-vol'),
+    audioVolumeSlider: document.getElementById('audio-volume-slider'),
+    audioVolumeVal: document.getElementById('audio-volume-val'),
+    videoSpeedSlider: document.getElementById('video-speed-slider'),
+    videoSpeedVal: document.getElementById('video-speed-val'),
+    inspectorSpeedSlider: document.getElementById('inspector-speed-slider'),
+    inspectorSpeedVal: document.getElementById('inspector-speed-val'),
+    inspectorVolumeSlider: document.getElementById('inspector-volume-slider'),
+    inspectorVolumeVal: document.getElementById('inspector-volume-val'),
+    checkPitchCorrection: document.getElementById('check-pitch-correction'),
+    inspectorAudioGroup: document.getElementById('inspector-audio-group'),
 
     // Figma Property Inspector (Right Sidebar)
     layersList: document.getElementById('layers-list'),
@@ -272,6 +292,8 @@ document.addEventListener('DOMContentLoaded', () => {
       sentencePause: state.sentencePause,
       videoLayers: scene.toJSON().layers,
       audioSpeed: state.video.audioSpeed,
+      audioVolume: state.video.audioVolume,
+      bg_image: state.video.bgImageUrl || localStorage.getItem('book_narrator_bg_image') || null,
       updated_at: Date.now()
     };
 
@@ -294,6 +316,8 @@ document.addEventListener('DOMContentLoaded', () => {
           paragraph_pause: draft.paragraphPause,
           sentence_pause: draft.sentencePause,
           audio_speed: draft.audioSpeed,
+          audio_volume: draft.audioVolume,
+          bg_image: draft.bg_image,
           layers: draft.videoLayers
         })
       });
@@ -332,13 +356,15 @@ document.addEventListener('DOMContentLoaded', () => {
             paragraphPause: res.paragraph_pause,
             sentencePause: res.sentence_pause,
             audioSpeed: res.audio_speed,
+            audioVolume: res.audio_volume,
+            bg_image: res.bg_image,
             videoLayers: res.layers
           };
         }
       } catch (e) {}
     }
 
-    if (draft && (draft.text || draft.title || (draft.videoLayers && draft.videoLayers.length > 0))) {
+    if (draft && (draft.text || draft.title || (draft.videoLayers && draft.videoLayers.length > 0) || draft.bg_image)) {
       if (draft.text) el.bookText.value = draft.text;
       if (draft.title) el.projectTitle.value = draft.title || '';
       if (draft.speed) {
@@ -368,9 +394,14 @@ document.addEventListener('DOMContentLoaded', () => {
         el.voiceSelect.value = draft.voice;
       }
       if (draft.audioSpeed) {
-        state.video.audioSpeed = draft.audioSpeed;
-        el.videoAudioPlayer.playbackRate = draft.audioSpeed;
-        el.speedBtns.forEach(b => b.classList.toggle('active', parseFloat(b.dataset.speed) === draft.audioSpeed));
+        setAudioSpeed(draft.audioSpeed, false);
+      }
+      if (draft.audioVolume !== undefined) {
+        setAudioVolume(draft.audioVolume, false);
+      }
+      const bgImg = draft.bg_image || localStorage.getItem('book_narrator_bg_image');
+      if (bgImg) {
+        loadBackgroundTemplate(bgImg, false);
       }
       if (draft.videoLayers && Array.isArray(draft.videoLayers) && draft.videoLayers.length > 0) {
         scene.layers = [];
@@ -924,7 +955,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // =========================================================
   const initVideoStudio = () => {
     if (!state.video.bgImage) {
-      loadBackgroundTemplate('/templates/sample-book.jpg');
+      const savedBg = state.video.bgImageUrl || localStorage.getItem('book_narrator_bg_image');
+      if (savedBg) {
+        loadBackgroundTemplate(savedBg, false);
+      } else {
+        loadBackgroundTemplate('/templates/sample-book.jpg', false);
+      }
     } else {
       renderVideoFrame();
     }
@@ -932,12 +968,20 @@ document.addEventListener('DOMContentLoaded', () => {
     selectLayer('layer_captions');
   };
 
-  const loadBackgroundTemplate = (url) => {
+  const loadBackgroundTemplate = (url, shouldSave = true) => {
+    if (!url) return;
     const img = new Image();
     img.onload = () => {
       state.video.bgImage = img;
+      state.video.bgImageUrl = url;
       state.video.bgImageLoaded = true;
       renderVideoFrame();
+      if (shouldSave) {
+        try {
+          localStorage.setItem('book_narrator_bg_image', url);
+        } catch (e) {}
+        debouncedSaveDraft();
+      }
     };
     img.onerror = () => {
       console.warn('Could not load background template:', url);
@@ -948,13 +992,43 @@ document.addEventListener('DOMContentLoaded', () => {
   el.bgImageUploader.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    showToast('Applying cover image...', 'info');
+
     const reader = new FileReader();
-    reader.onload = (event) => loadBackgroundTemplate(event.target.result);
+    reader.onload = async (event) => {
+      const dataUrl = event.target.result;
+      // 1. Instant local preview
+      loadBackgroundTemplate(dataUrl, false);
+
+      // 2. Persist to server disk so it never disappears on refresh
+      try {
+        const res = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data_url: dataUrl })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) {
+            state.video.bgImageUrl = data.url;
+            try {
+              localStorage.setItem('book_narrator_bg_image', data.url);
+            } catch (err) {}
+            saveDraft();
+            showToast('Cover image saved & persisted', 'success');
+          }
+        }
+      } catch (err) {
+        console.warn('Could not persist image to server:', err);
+      }
+    };
     reader.readAsDataURL(file);
   });
 
   el.btnSampleTemplate.addEventListener('click', () => {
-    loadBackgroundTemplate('/templates/sample-book.jpg');
+    loadBackgroundTemplate('/templates/sample-book.jpg', true);
+    showToast('Loaded sample book mockup', 'info');
   });
 
   // =========================================================
@@ -1026,17 +1100,115 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  // CapCut Audio Speed Buttons
+  // =========================================================
+  // CAPCUT AUDIO ADJUSTMENT CONTROLS (SPEED, VOLUME, PITCH)
+  // =========================================================
+  const setAudioSpeed = (spd, triggerSave = true) => {
+    const clamped = Math.max(0.5, Math.min(2.5, Math.round(parseFloat(spd) * 100) / 100));
+    state.video.audioSpeed = clamped;
+    el.videoAudioPlayer.playbackRate = clamped;
+
+    if (el.videoSpeedSlider) el.videoSpeedSlider.value = clamped;
+    if (el.videoSpeedVal) el.videoSpeedVal.textContent = clamped.toFixed(2) + 'x';
+    if (el.inspectorSpeedSlider) el.inspectorSpeedSlider.value = clamped;
+    if (el.inspectorSpeedVal) el.inspectorSpeedVal.textContent = clamped.toFixed(2) + 'x';
+
+    // Highlight preset pills if matching
+    el.speedBtns.forEach(b => {
+      const bSpeed = parseFloat(b.dataset.speed);
+      b.classList.toggle('active', Math.abs(bSpeed - clamped) < 0.02);
+    });
+
+    if (triggerSave) debouncedSaveDraft();
+  };
+
+  const setAudioVolume = (vol, isUser = true) => {
+    const clamped = Math.max(0, Math.min(1.0, Math.round(parseFloat(vol) * 100) / 100));
+    state.video.audioVolume = clamped;
+    el.videoAudioPlayer.volume = clamped;
+
+    if (el.audioVolumeSlider) el.audioVolumeSlider.value = clamped;
+    if (el.audioVolumeVal) el.audioVolumeVal.textContent = Math.round(clamped * 100) + '%';
+    if (el.inspectorVolumeSlider) el.inspectorVolumeSlider.value = clamped;
+    if (el.inspectorVolumeVal) el.inspectorVolumeVal.textContent = Math.round(clamped * 100) + '%';
+
+    // Update mute icon
+    if (clamped === 0) {
+      state.video.isMuted = true;
+      if (el.svgAudioVol) {
+        el.svgAudioVol.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>';
+      }
+    } else {
+      if (isUser) {
+        state.video.isMuted = false;
+        state.video.lastVolume = clamped;
+      }
+      if (el.svgAudioVol) {
+        el.svgAudioVol.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>';
+      }
+    }
+
+    if (isUser) debouncedSaveDraft();
+  };
+
+  const toggleAudioMute = () => {
+    if (state.video.isMuted || state.video.audioVolume === 0) {
+      setAudioVolume(state.video.lastVolume || 1.0, true);
+    } else {
+      state.video.lastVolume = state.video.audioVolume;
+      setAudioVolume(0, true);
+    }
+  };
+
+  const setPreservePitch = (enabled) => {
+    state.video.preservePitch = !!enabled;
+    el.videoAudioPlayer.preservesPitch = !!enabled;
+    if ('mozPreservesPitch' in el.videoAudioPlayer) el.videoAudioPlayer.mozPreservesPitch = !!enabled;
+    if (el.checkPitchCorrection) el.checkPitchCorrection.checked = !!enabled;
+    debouncedSaveDraft();
+  };
+
+  // Connect Audio Controls Listeners
+  if (el.btnAudioMute) el.btnAudioMute.addEventListener('click', toggleAudioMute);
+  if (el.audioVolumeSlider) {
+    el.audioVolumeSlider.addEventListener('input', (e) => setAudioVolume(e.target.value, true));
+  }
+  if (el.inspectorVolumeSlider) {
+    el.inspectorVolumeSlider.addEventListener('input', (e) => setAudioVolume(e.target.value, true));
+  }
+  if (el.videoSpeedSlider) {
+    el.videoSpeedSlider.addEventListener('input', (e) => setAudioSpeed(e.target.value, true));
+  }
+  if (el.inspectorSpeedSlider) {
+    el.inspectorSpeedSlider.addEventListener('input', (e) => setAudioSpeed(e.target.value, true));
+  }
+  if (el.checkPitchCorrection) {
+    el.checkPitchCorrection.addEventListener('change', (e) => setPreservePitch(e.target.checked));
+  }
+
+  // CapCut Audio Speed Preset Pills
   el.speedBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      el.speedBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       const spd = parseFloat(btn.dataset.speed);
-      state.video.audioSpeed = spd;
-      el.videoAudioPlayer.playbackRate = spd;
-      debouncedSaveDraft();
+      setAudioSpeed(spd, true);
     });
   });
+
+  // Clicking Audio Track on Timeline reveals Audio Properties in inspector
+  if (el.trackAudio) {
+    el.trackAudio.addEventListener('click', () => {
+      if (el.inspectorAudioGroup) {
+        el.inspectorAudioGroup.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
+  if (el.timelineAudioBlock) {
+    el.timelineAudioBlock.addEventListener('click', () => {
+      if (el.inspectorAudioGroup) {
+        el.inspectorAudioGroup.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
 
   // Transport Controls
   const toggleVideoPlay = () => {
@@ -1051,6 +1223,8 @@ document.addEventListener('DOMContentLoaded', () => {
       el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
     } else {
       el.videoAudioPlayer.playbackRate = state.video.audioSpeed;
+      el.videoAudioPlayer.volume = state.video.audioVolume;
+      el.videoAudioPlayer.preservesPitch = state.video.preservePitch;
       const playPromise = el.videoAudioPlayer.play();
       if (playPromise !== undefined) {
         playPromise.then(() => {
@@ -1142,9 +1316,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioCtx.createMediaElementSource(exportAudio);
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = state.video.audioVolume;
       const dest = audioCtx.createMediaStreamDestination();
-      source.connect(dest);
-      source.connect(audioCtx.destination);
+      source.connect(gainNode);
+      gainNode.connect(dest);
+      gainNode.connect(audioCtx.destination);
 
       const combinedStream = new MediaStream([
         ...stream.getVideoTracks(),

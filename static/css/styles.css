@@ -745,7 +745,60 @@ body {
   margin-left: 6px;
 }
 
-/* Audio Speed Control Bar */
+/* Audio Controls Deck (CapCut Style Volume & Custom Speed) */
+.audio-controls-deck {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.deck-volume-wrap, .deck-speed-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audio-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.audio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  cursor: pointer;
+  border: 1px solid #fff;
+}
+.audio-slider.volume-slider {
+  width: 65px;
+}
+.audio-slider.speed-slider {
+  width: 85px;
+}
+
+.audio-val-label, .speed-val-badge {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 32px;
+}
+.speed-val-badge {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-align: center;
+  min-width: 38px;
+}
+
 .speed-control-deck {
   display: flex;
   align-items: center;

@@ -244,14 +244,34 @@ Drag & drop any .txt or .md file right here..."></textarea>
               <span id="video-timecode" class="timeline-timecode">00:00.0 / 00:00.0</span>
             </div>
 
-            <!-- CapCut Audio Speed Control -->
-            <div class="speed-control-deck">
-              <span class="speed-label">Audio Speed:</span>
-              <div class="speed-buttons">
-                <button class="speed-btn" data-speed="0.8">0.8x</button>
-                <button class="speed-btn active" data-speed="1.0">1.0x</button>
-                <button class="speed-btn" data-speed="1.2">1.2x</button>
-                <button class="speed-btn" data-speed="1.5">1.5x</button>
+            <!-- CapCut Audio Controls Deck (Volume & Custom Speed) -->
+            <div class="audio-controls-deck">
+              <!-- Volume & Mute -->
+              <div class="deck-volume-wrap">
+                <button id="btn-audio-mute" class="transport-btn" style="width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center;" title="Mute / Unmute">
+                  <svg id="svg-audio-vol" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                  </svg>
+                </button>
+                <input type="range" id="audio-volume-slider" min="0" max="1" step="0.05" value="1" class="audio-slider volume-slider" title="Volume: 100%" />
+                <span id="audio-volume-val" class="audio-val-label">100%</span>
+              </div>
+
+              <div class="top-divider" style="height: 18px; margin: 0 4px;"></div>
+
+              <!-- Speed Controls -->
+              <div class="deck-speed-wrap">
+                <span class="speed-label">Speed:</span>
+                <input type="range" id="video-speed-slider" min="0.5" max="2.5" step="0.05" value="1.0" class="audio-slider speed-slider" title="Playback Speed" />
+                <span id="video-speed-val" class="speed-val-badge">1.00x</span>
+                <div class="speed-buttons">
+                  <button class="speed-btn" data-speed="0.8">0.8x</button>
+                  <button class="speed-btn active" data-speed="1.0">1.0x</button>
+                  <button class="speed-btn" data-speed="1.2">1.2x</button>
+                  <button class="speed-btn" data-speed="1.5">1.5x</button>
+                </div>
               </div>
             </div>
           </div>
@@ -549,6 +569,31 @@ Drag & drop any .txt or .md file right here..."></textarea>
             <div class="checkbox-row">
               <input type="checkbox" id="toggle-player-widget" checked class="form-checkbox" />
               <label for="toggle-player-widget" class="checkbox-label">Aesthetic Audio Bar Widget</label>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Audio Track Properties (CapCut Inspector) -->
+          <div id="inspector-audio-group" class="setting-group">
+            <label class="setting-label">Audio Track Properties</label>
+            <div class="sub-slider-item">
+              <div class="sub-slider-header">
+                <span>Speed</span>
+                <span id="inspector-speed-val" class="slider-val">1.00x</span>
+              </div>
+              <input type="range" id="inspector-speed-slider" min="0.5" max="2.5" step="0.05" value="1.0" class="form-range" />
+            </div>
+            <div class="sub-slider-item" style="margin-top: 8px;">
+              <div class="sub-slider-header">
+                <span>Volume</span>
+                <span id="inspector-volume-val" class="slider-val">100%</span>
+              </div>
+              <input type="range" id="inspector-volume-slider" min="0" max="1" step="0.05" value="1.0" class="form-range" />
+            </div>
+            <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+              <label class="setting-label" style="margin: 0; cursor: pointer;" for="check-pitch-correction">Preserve Pitch</label>
+              <input type="checkbox" id="check-pitch-correction" checked style="cursor: pointer;" />
             </div>
           </div>
 
