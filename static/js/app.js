@@ -162,6 +162,8 @@ document.addEventListener('DOMContentLoaded', () => {
     selectionTagName: document.getElementById('selection-tag-name'),
     bgImageUploader: document.getElementById('bg-image-uploader'),
     btnSampleTemplate: document.getElementById('btn-sample-template'),
+    btnRestoreCaptions: document.getElementById('btn-restore-captions'),
+    btnInspectorRestoreCaptions: document.getElementById('btn-inspector-restore-captions'),
     btnAddTextLayer: document.getElementById('btn-add-text-layer'),
     // Shared Master Audio Player (Guarantees sound always works in both Narrator & Video Studio)
     videoAudioPlayer: document.getElementById('main-audio-player'),
@@ -388,6 +390,39 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!scene.getSelectedLayer()) {
           scene.selectLayer(scene.layers[0]?.id || 'layer_captions');
         }
+        // Guarantee core layers exist and remain active
+        if (!scene.getLayer('layer_captions')) {
+          scene.addLayer(new TranscriptionLayer({
+            id: 'layer_captions',
+            name: 'Synced Captions',
+            x: 880,
+            y: 240,
+            width: 920,
+            fontSize: 54,
+            fill: '#111827',
+            align: 'left',
+            text: el.bookText.value.slice(0, 140) || '',
+            startTime: 0,
+            endTime: 999999
+          }));
+        }
+        if (!scene.getLayer('layer_player_widget')) {
+          scene.addLayer(new AudioWidgetLayer({
+            id: 'layer_player_widget',
+            name: 'Audio Player Bar',
+            x: 840,
+            y: 720,
+            width: 940,
+            color: '#111827',
+            thickness: 2.5,
+            playheadRadius: 7,
+            startTime: 0,
+            endTime: 999999
+          }));
+        }
+        scene.layers.forEach(l => {
+          if (l.endTime === 10 || typeof l.endTime !== 'number') l.endTime = 999999;
+        });
       }
       updateStats();
       if (el.autosaveStatus) el.autosaveStatus.textContent = 'Draft Restored';
@@ -541,9 +576,58 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       el.layersList.appendChild(item);
     });
+
+    // Toggle Restore Synced Captions helper button if captions was deleted
+    const hasCaptions = !!scene.getLayer('layer_captions');
+    if (el.btnInspectorRestoreCaptions) {
+      el.btnInspectorRestoreCaptions.style.display = hasCaptions ? 'none' : 'flex';
+    }
   };
 
+  const ensureOrRestoreCaptions = () => {
+    let capLayer = scene.getLayer('layer_captions');
+    if (!capLayer) {
+      const activeText = (state.activeSession && state.activeSession.text) ? state.activeSession.text.slice(0, 140) : (el.bookText.value.slice(0, 140) || '');
+      capLayer = new TranscriptionLayer({
+        id: 'layer_captions',
+        name: 'Synced Captions',
+        x: 880,
+        y: 240,
+        width: 920,
+        fontSize: 54,
+        fill: '#111827',
+        align: 'left',
+        text: activeText,
+        startTime: 0,
+        endTime: 999999
+      });
+      scene.addLayer(capLayer);
+      showToast('Synced Captions restored', 'success');
+    } else {
+      capLayer.visible = true;
+      capLayer.endTime = 999999;
+      showToast('Synced Captions selected', 'info');
+    }
+    scene.selectLayer('layer_captions');
+    renderLayersList();
+    syncInspectorFromLayer();
+    interactionMgr.updateSelectionBox();
+    renderVideoFrame();
+    saveDraft();
+  };
+
+  if (el.btnRestoreCaptions) {
+    el.btnRestoreCaptions.addEventListener('click', ensureOrRestoreCaptions);
+  }
+  if (el.btnInspectorRestoreCaptions) {
+    el.btnInspectorRestoreCaptions.addEventListener('click', ensureOrRestoreCaptions);
+  }
+
   const selectLayer = (layerId) => {
+    if (layerId === 'layer_captions' && !scene.getLayer('layer_captions')) {
+      ensureOrRestoreCaptions();
+      return;
+    }
     scene.selectLayer(layerId);
     renderLayersList();
     syncInspectorFromLayer();
@@ -1175,6 +1259,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (sess.videoLayers && Array.isArray(sess.videoLayers) && sess.videoLayers.length > 0) {
       scene.layers = sess.videoLayers.map(createLayerFromData).filter(Boolean);
+      if (!scene.getLayer('layer_captions')) {
+        scene.addLayer(capLayer);
+      }
+      if (!scene.getLayer('layer_player_widget')) {
+        scene.addLayer(playerWidget);
+      }
+      scene.layers.forEach(l => {
+        if (l.endTime === 10 || typeof l.endTime !== 'number') l.endTime = 999999;
+      });
     } else {
       scene.layers = [capLayer, playerWidget];
     }

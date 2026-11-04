@@ -153,8 +153,13 @@ export function renderScene(ctx, scene, options = {}) {
   // 2. Filter layers visible at currentTime
   const activeLayers = scene.layers.filter(layer => {
     if (!layer.visible) return false;
-    // Layer must be within timeline range
-    return currentTime >= layer.startTime && currentTime <= layer.endTime;
+    // Core layers stay active across the entire video
+    if (layer.type === 'transcription' || layer.type === 'audio_widget' || layer.id === 'layer_captions' || layer.id === 'layer_player_widget') {
+      return true;
+    }
+    const start = typeof layer.startTime === 'number' ? layer.startTime : 0;
+    const end = typeof layer.endTime === 'number' ? layer.endTime : 999999;
+    return currentTime >= start && currentTime <= end;
   });
 
   // 3. Render Layers in Order
@@ -311,9 +316,19 @@ function drawTranscriptionLayer(ctx, layer, scene, currentTime) {
         activeWordIndex = activeSeg.words.findIndex(w => currentTime >= w.start && currentTime <= w.end);
       }
     } else {
-      // If before first segment or after last, show first or empty
-      const first = scene.syncedSegments[0];
-      if (first && currentTime < first.start) currentCaptionText = first.text;
+      // In pauses between segments or trailing audio, display the most recent segment so text never flickers off
+      if (currentTime <= scene.syncedSegments[0].start) {
+        currentCaptionText = scene.syncedSegments[0].text;
+      } else {
+        let lastPastSeg = null;
+        for (let i = scene.syncedSegments.length - 1; i >= 0; i--) {
+          if (currentTime >= scene.syncedSegments[i].start) {
+            lastPastSeg = scene.syncedSegments[i];
+            break;
+          }
+        }
+        currentCaptionText = lastPastSeg ? lastPastSeg.text : scene.syncedSegments[scene.syncedSegments.length - 1].text;
+      }
     }
   }
 

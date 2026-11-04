@@ -13,7 +13,7 @@ export class Layer {
     
     // Timeline boundaries (in seconds)
     this.startTime = typeof data.startTime === 'number' ? data.startTime : 0;
-    this.endTime = typeof data.endTime === 'number' ? data.endTime : 10;
+    this.endTime = typeof data.endTime === 'number' ? data.endTime : 999999;
     
     // Canvas geometry (in canvas pixels e.g. 1920x1080)
     this.x = typeof data.x === 'number' ? data.x : 100;
@@ -152,6 +152,8 @@ export class TextLayer extends Layer {
 export class TranscriptionLayer extends TextLayer {
   constructor(data = {}) {
     super({ ...data, type: 'transcription' });
+    this.type = 'transcription';
+    this.endTime = 999999;
     this.name = data.name || 'Synced Captions';
     this.text = data.text || 'let me say that again your emotions are not your friend';
     this.maxLines = typeof data.maxLines === 'number' ? data.maxLines : 3;
@@ -222,6 +224,8 @@ export class ShapeLayer extends Layer {
 export class AudioWidgetLayer extends Layer {
   constructor(data = {}) {
     super({ ...data, type: 'audio_widget' });
+    this.type = 'audio_widget';
+    this.endTime = 999999;
     this.name = data.name || 'Audio Player Bar';
     this.color = data.color || '#111827';
     this.thickness = typeof data.thickness === 'number' ? data.thickness : 4;
@@ -243,16 +247,20 @@ export class AudioWidgetLayer extends Layer {
 
 export function createLayerFromData(data = {}) {
   if (!data) return null;
-  if (data.id === 'layer_captions') return new TranscriptionLayer(data);
-  if (data.id === 'layer_player_widget') return new AudioWidgetLayer(data);
-  switch (data.type) {
-    case 'frame': return new FrameLayer(data);
-    case 'transcription': return new TranscriptionLayer(data);
-    case 'text': return new TextLayer(data);
-    case 'image': return new ImageLayer(data);
-    case 'shape': return new ShapeLayer(data);
-    case 'audio_widget': return new AudioWidgetLayer(data);
-    default: return new Layer(data);
+  const cleanData = { ...data };
+  if (cleanData.endTime === 10 || cleanData.endTime === undefined) {
+    cleanData.endTime = 999999;
+  }
+  if (cleanData.id === 'layer_captions') return new TranscriptionLayer(cleanData);
+  if (cleanData.id === 'layer_player_widget') return new AudioWidgetLayer(cleanData);
+  switch (cleanData.type) {
+    case 'frame': return new FrameLayer(cleanData);
+    case 'transcription': return new TranscriptionLayer(cleanData);
+    case 'text': return new TextLayer(cleanData);
+    case 'image': return new ImageLayer(cleanData);
+    case 'shape': return new ShapeLayer(cleanData);
+    case 'audio_widget': return new AudioWidgetLayer(cleanData);
+    default: return new Layer(cleanData);
   }
 }
 
