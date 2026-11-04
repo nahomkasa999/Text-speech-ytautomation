@@ -377,3 +377,23 @@ body.zen-mode .panel-resizer {
   align-items: center;
   flex-shrink: 0;
 }
+
+.layer-item-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #B3B3B3);
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 2px;
+  opacity: 0.6;
+  margin-left: auto;
+}
+
+.layer-item-delete:hover {
+  opacity: 1;
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.15);
+}

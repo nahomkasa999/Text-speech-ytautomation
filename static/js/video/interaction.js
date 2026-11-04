@@ -444,17 +444,18 @@ export class CanvasInteractionManager {
     // Delete or Backspace Key
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const layer = this.scene.getSelectedLayer();
-      if (!layer || layer.type === 'transcription' || layer.id === 'layer_captions' || layer.type === 'audio_widget') {
+      if (!layer || layer.type === 'transcription' || layer.id === 'layer_captions' || layer.id === 'layer_player_widget' || layer.type === 'audio_widget') {
         return; // Core Synced Captions and Player Widget can NEVER be deleted!
       }
       e.preventDefault();
-      const removed = layer;
-      this.history.execute(new RemoveLayerCommand(this.scene, removed, () => {
+      const removedId = layer.id;
+      this.history.execute(new RemoveLayerCommand(this.scene, layer, () => {
         this.scene.selectLayer('layer_captions');
         this.updateSelectionBox();
         this.onRender();
         this.onSelectionChange?.(this.scene.getSelectedLayer());
       }));
+      this.scene.removeLayer(removedId);
       this.scene.selectLayer('layer_captions');
       this.updateSelectionBox();
       this.onRender();

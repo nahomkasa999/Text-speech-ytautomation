@@ -59,13 +59,15 @@ export class RemoveLayerCommand extends Command {
     super(`Delete ${layer?.name || 'Layer'}`);
     this.scene = scene;
     this.layer = layer;
+    this.layerId = layer?.id || (typeof layerOrId === 'string' ? layerOrId : null);
     this.index = layer ? scene.layers.findIndex(l => l.id === layer.id) : -1;
     this.onUpdate = onUpdate;
   }
 
   execute() {
-    if (this.layer) {
-      this.scene.removeLayer(this.layer.id);
+    const id = this.layerId || this.layer?.id;
+    if (id) {
+      this.scene.removeLayer(id);
       if (this.onUpdate) this.onUpdate();
     }
   }

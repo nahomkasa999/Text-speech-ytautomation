@@ -166,6 +166,7 @@ export class TranscriptionLayer extends TextLayer {
   toJSON() {
     return {
       ...super.toJSON(),
+      type: 'transcription',
       maxLines: this.maxLines,
       wordsPerChunk: this.wordsPerChunk,
       highlightActiveWord: this.highlightActiveWord,
@@ -231,6 +232,7 @@ export class AudioWidgetLayer extends Layer {
   toJSON() {
     return {
       ...super.toJSON(),
+      type: 'audio_widget',
       color: this.color,
       thickness: this.thickness,
       showControls: this.showControls,
@@ -240,6 +242,9 @@ export class AudioWidgetLayer extends Layer {
 }
 
 export function createLayerFromData(data = {}) {
+  if (!data) return null;
+  if (data.id === 'layer_captions') return new TranscriptionLayer(data);
+  if (data.id === 'layer_player_widget') return new AudioWidgetLayer(data);
   switch (data.type) {
     case 'frame': return new FrameLayer(data);
     case 'transcription': return new TranscriptionLayer(data);
@@ -278,6 +283,9 @@ export class Scene {
   }
 
   addLayer(layer, index = null) {
+    if (!layer) return null;
+    // Prevent duplicate layers with identical ID
+    this.layers = this.layers.filter(l => l.id !== layer.id);
     if (index === null || index >= this.layers.length) {
       this.layers.push(layer);
     } else {
@@ -287,13 +295,10 @@ export class Scene {
   }
 
   removeLayer(layerId) {
-    const idx = this.layers.findIndex(l => l.id === layerId);
-    if (idx !== -1) {
-      const removed = this.layers.splice(idx, 1)[0];
-      this.selectedLayerIds = this.selectedLayerIds.filter(id => id !== layerId);
-      return removed;
-    }
-    return null;
+    const initialLen = this.layers.length;
+    this.layers = this.layers.filter(l => l.id !== layerId);
+    this.selectedLayerIds = this.selectedLayerIds.filter(id => id !== layerId);
+    return this.layers.length < initialLen;
   }
 
   getLayer(layerId) {

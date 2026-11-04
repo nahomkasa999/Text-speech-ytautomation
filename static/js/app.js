@@ -372,7 +372,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (draft.videoLayers && Array.isArray(draft.videoLayers) && draft.videoLayers.length > 0) {
         scene.layers = [];
+        const seenIds = new Set();
         draft.videoLayers.forEach(lData => {
+          if (!lData || seenIds.has(lData.id)) return;
+          seenIds.add(lData.id);
           // Normalize coordinate migration if old fractional format
           if (lData.x <= 1 && lData.width <= 1) {
             lData.x = Math.round(lData.x * 1920);
@@ -505,8 +508,37 @@ document.addEventListener('DOMContentLoaded', () => {
       const item = document.createElement('div');
       item.className = `layer-item ${selected && selected.id === l.id ? 'active' : ''}`;
       const icon = l.type === 'transcription' ? 'T' : (l.type === 'audio_widget' ? 'P' : 'T');
-      item.innerHTML = `<span style="font-weight:700; opacity:0.6; font-size:11px;">${icon}</span><span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${l.name}</span>`;
-      item.addEventListener('click', () => selectLayer(l.id));
+      const isCustom = l.id !== 'layer_captions' && l.id !== 'layer_player_widget' && l.type !== 'transcription';
+
+      const deleteBtnHtml = isCustom
+        ? `<button class="layer-item-delete" title="Delete layer">
+             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+           </button>`
+        : '';
+
+      const displayName = l.text ? (l.text.length > 18 ? l.text.slice(0, 18) + '...' : l.text) : (l.name || 'Layer');
+
+      item.innerHTML = `
+        <span style="font-weight:700; opacity:0.6; font-size:11px;">${icon}</span>
+        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
+        ${deleteBtnHtml}
+      `;
+
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.layer-item-delete')) {
+          e.stopPropagation();
+          scene.removeLayer(l.id);
+          selectLayer('layer_captions');
+          renderLayersList();
+          syncInspectorFromLayer();
+          interactionMgr.updateSelectionBox();
+          renderVideoFrame();
+          saveDraft();
+          showToast('Layer deleted', 'info');
+          return;
+        }
+        selectLayer(l.id);
+      });
       el.layersList.appendChild(item);
     });
   };
@@ -622,13 +654,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // Delete Layer (Only applies to custom text layers)
   el.btnDeleteLayer.addEventListener('click', () => {
     const l = getSelectedLayer();
-    if (l && l.type === 'text') {
+    if (l && l.id !== 'layer_captions' && l.id !== 'layer_player_widget' && l.type !== 'transcription') {
       const removedLayer = l;
       history.execute(new RemoveLayerCommand(scene, removedLayer, () => {
         selectLayer('layer_captions');
       }));
+      scene.removeLayer(removedLayer.id);
       selectLayer('layer_captions');
-      debouncedSaveDraft();
+      renderLayersList();
+      syncInspectorFromLayer();
+      interactionMgr.updateSelectionBox();
+      renderVideoFrame();
+      saveDraft();
+      showToast('Layer deleted', 'info');
     }
   });
 
@@ -1103,21 +1141,53 @@ document.addEventListener('DOMContentLoaded', () => {
     el.deckSubtitle.textContent = `${sess.word_count.toLocaleString()} words • ${formatDuration(sess.duration_seconds)}`;
     // Master audio setup (shared between Narrator deck & Video Studio)
     el.mainAudioPlayer.src = sess.audio_url;
-    el.mainAudioPlayer.load(); // Forces immediate browser audio decode
+    el.mainAudioPlayer.load();
+    el.videoAudioPlayer.src = sess.audio_url;
+    el.videoAudioPlayer.currentTime = 0;
     el.btnDownloadAudio.href = sess.audio_url;
     el.btnDownloadAudio.setAttribute('download', `${sess.title.replace(/[^a-z0-9_-]/gi, '_')}.wav`);
 
     // Sync into Video Studio
     el.videoProjectName.textContent = sess.title;
 
+    // Reset Video Studio layers to clean slate for THIS chapter
+    const capLayer = new TranscriptionLayer({
+      id: 'layer_captions',
+      name: 'Synced Captions',
+      x: 880,
+      y: 240,
+      width: 920,
+      fontSize: 54,
+      fill: '#111827',
+      align: 'left',
+      text: sess.text ? sess.text.slice(0, 140) : ''
+    });
+    const playerWidget = new AudioWidgetLayer({
+      id: 'layer_player_widget',
+      name: 'Audio Player Bar',
+      x: 840,
+      y: 720,
+      width: 940,
+      color: '#111827',
+      thickness: 2.5,
+      playheadRadius: 7
+    });
+
+    if (sess.videoLayers && Array.isArray(sess.videoLayers) && sess.videoLayers.length > 0) {
+      scene.layers = sess.videoLayers.map(createLayerFromData).filter(Boolean);
+    } else {
+      scene.layers = [capLayer, playerWidget];
+    }
+
     // Build timeline subtitle segments
     buildSyncedSegments(sess.text, sess.duration_seconds);
 
     renderHistoryList();
-    if (currentMode === 'video') {
-      buildTimelineRulerAndTracks();
-      renderVideoFrame(0);
-    }
+    renderLayersList();
+    selectLayer('layer_captions');
+    buildTimelineRulerAndTracks();
+    renderVideoFrame(0);
+    updatePlayheadPosition(0, sess.duration_seconds || 10);
   };
 
   const buildSyncedSegments = (text, totalDuration) => {
@@ -1194,8 +1264,11 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sess.id })
           });
-          if (state.activeSession && state.activeSession.id === sess.id) state.activeSession = null;
-          loadSessions();
+          if (state.activeSession && state.activeSession.id === sess.id) {
+            el.btnNewProject.click();
+          }
+          await loadSessions();
+          showToast(`Deleted "${sess.title}"`, 'info');
         }
       });
 
@@ -1375,6 +1448,41 @@ document.addEventListener('DOMContentLoaded', () => {
     updateStats();
     renderHistoryList();
     setMode('narration');
+
+    // Reset Video Studio Scene completely
+    scene.layers = [
+      new TranscriptionLayer({
+        id: 'layer_captions',
+        name: 'Synced Captions',
+        x: 880,
+        y: 240,
+        width: 920,
+        fontSize: 54,
+        fill: '#111827',
+        align: 'left',
+        text: ''
+      }),
+      new AudioWidgetLayer({
+        id: 'layer_player_widget',
+        name: 'Audio Player Bar',
+        x: 840,
+        y: 720,
+        width: 940,
+        color: '#111827',
+        thickness: 2.5,
+        playheadRadius: 7
+      })
+    ];
+    scene.syncedSegments = [];
+    scene.duration = 10;
+    el.videoAudioPlayer.src = '';
+    el.videoProjectName.textContent = 'Untitled Project';
+
+    renderLayersList();
+    selectLayer('layer_captions');
+    buildTimelineRulerAndTracks();
+    renderVideoFrame(0);
+
     localStorage.removeItem('book_narrator_draft_buffer');
     fetch('/api/draft', {
       method: 'POST',
@@ -1382,6 +1490,7 @@ document.addEventListener('DOMContentLoaded', () => {
       body: JSON.stringify({ title: '', text: '', layers: null })
     }).catch(() => {});
     if (el.autosaveStatus) el.autosaveStatus.textContent = 'New Project';
+    showToast('Created new project', 'info');
     el.bookText.focus();
   });
 
