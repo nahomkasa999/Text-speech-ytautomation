@@ -753,10 +753,11 @@ body {
 }
 
 /* Audio Widget Template Cards */
-.widget-template-grid {
+.widget-template-grid,
+.widget-tmpl-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
 .widget-tmpl-btn {

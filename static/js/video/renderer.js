@@ -268,13 +268,20 @@ function drawTextLayer(ctx, layer) {
     ctx.shadowOffsetY = layer.shadow.y || 0;
   }
 
-  let startY = layer.y;
-  const vAlign = layer.verticalAlign || (layer.type === 'transcription' ? 'middle' : 'top');
-  if (vAlign === 'middle') {
-    startY = layer.y + (layer.height - layout.totalHeight) / 2;
-  } else if (vAlign === 'bottom') {
-    startY = layer.y + (layer.height - layout.totalHeight);
+  if (typeof layer.anchorCenterY !== 'number') {
+    layer.anchorCenterY = layer.y + (layer.height || layout.totalHeight) / 2;
   }
+
+  let startY = layer.y;
+  const vAlign = layer.verticalAlign || 'top';
+  if (vAlign === 'middle') {
+    startY = layer.anchorCenterY - (layout.totalHeight / 2);
+  } else if (vAlign === 'bottom') {
+    startY = (layer.anchorCenterY + (layer.height || layout.totalHeight) / 2) - layout.totalHeight;
+  }
+
+  layer.renderedTop = startY;
+  layer.renderedHeight = layout.totalHeight;
 
   lines.forEach((lineText, idx) => {
     const cleanLine = lineText.replace('\n', '');
@@ -343,13 +350,23 @@ function drawTranscriptionLayer(ctx, layer, scene, currentTime) {
   ctx.fillStyle = layer.fill || '#111827';
   ctx.textBaseline = 'top';
 
-  let startY = layer.y;
-  const vAlign = layer.verticalAlign || (layer.type === 'transcription' ? 'middle' : 'top');
-  if (vAlign === 'middle') {
-    startY = layer.y + (layer.height - layout.totalHeight) / 2;
-  } else if (vAlign === 'bottom') {
-    startY = layer.y + (layer.height - layout.totalHeight);
+  if (typeof layer.anchorCenterY !== 'number') {
+    layer.anchorCenterY = layer.y + (layer.height || 400) / 2;
   }
+
+  let startY = layer.y;
+  const vAlign = layer.verticalAlign || 'middle';
+  if (vAlign === 'middle') {
+    // Symmetrical growth in both directions: center stays pinned
+    startY = layer.anchorCenterY - (layout.totalHeight / 2);
+  } else if (vAlign === 'bottom') {
+    startY = (layer.anchorCenterY + (layer.height || 400) / 2) - layout.totalHeight;
+  } else {
+    startY = layer.anchorCenterY - (layer.height || 400) / 2;
+  }
+
+  layer.renderedTop = startY;
+  layer.renderedHeight = layout.totalHeight;
 
   let globalWordCount = 0;
 
@@ -483,6 +500,12 @@ function drawAudioWidgetLayer(ctx, layer, scene, currentTime) {
       break;
     case 'minimal_dots':
       drawMinimalDotsWidget(ctx, layer, progress, color);
+      break;
+    case 'equalizer':
+      drawEqualizerWidget(ctx, layer, progress, color, currentTime, duration);
+      break;
+    case 'gradient_pill':
+      drawGradientPillWidget(ctx, layer, progress, color, currentTime, duration);
       break;
     case 'classic':
     default:
@@ -692,6 +715,126 @@ function drawMinimalDotsWidget(ctx, layer, progress, color) {
   if (layer.showControls) {
     drawWidgetTransportIcons(ctx, startX + trackW / 2, barY + 36, color);
   }
+}
+
+function drawEqualizerWidget(ctx, layer, progress, color, currentTime, duration) {
+  const startX = layer.x;
+  const startY = layer.y;
+  const trackW = layer.width;
+  const barCount = 36;
+  const barW = (trackW / barCount) * 0.65;
+  const gap = (trackW / barCount) * 0.35;
+  const baseY = startY + 44;
+
+  for (let i = 0; i < barCount; i++) {
+    const frac = i / (barCount - 1);
+    const isPlayed = frac <= progress;
+
+    const t = currentTime * 4.2;
+    const wave1 = Math.sin(i * 0.45 + t) * 16;
+    const wave2 = Math.cos(i * 0.85 - t * 0.8) * 12;
+    const wave3 = Math.sin(i * 1.4 + t * 1.5) * 6;
+    const rawH = 8 + Math.abs(wave1 + wave2 + wave3);
+    const h = Math.max(6, Math.min(50, rawH));
+
+    const bx = startX + i * (barW + gap);
+    const by = baseY - h;
+
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = isPlayed ? 1.0 : 0.28;
+
+    drawRoundedRectPath(ctx, bx, by, barW, h, barW / 2);
+    ctx.fill();
+
+    if (isPlayed) {
+      ctx.globalAlpha = 0.85;
+      const peakY = by - 6;
+      ctx.fillRect(bx, peakY, barW, 2);
+    }
+    ctx.restore();
+  }
+
+  if (layer.showControls) {
+    drawWidgetTransportIcons(ctx, startX + trackW / 2, baseY + 32, color);
+  }
+}
+
+function drawGradientPillWidget(ctx, layer, progress, color, currentTime, duration) {
+  const startX = layer.x;
+  const startY = layer.y;
+  const trackW = layer.width;
+  const pillH = 46;
+  const radius = pillH / 2;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(18, 18, 22, 0.72)';
+  drawRoundedRectPath(ctx, startX, startY, trackW, pillH, radius);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Mini Play Icon
+  const playCx = startX + 24;
+  const playCy = startY + radius;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(playCx, playCy, 12, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.moveTo(playCx - 2.5, playCy - 5);
+  ctx.lineTo(playCx + 4.5, playCy);
+  ctx.lineTo(playCx - 2.5, playCy + 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Progress Bar
+  const barX = startX + 48;
+  const barY = startY + radius;
+  const barW = Math.max(40, trackW - 165);
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(barX, barY);
+  ctx.lineTo(barX + barW, barY);
+  ctx.stroke();
+
+  const playedW = barW * progress;
+  if (playedW > 0) {
+    const grad = ctx.createLinearGradient(barX, barY, barX + playedW, barY);
+    grad.addColorStop(0, '#0D99FF');
+    grad.addColorStop(1, '#A855F7');
+
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(barX, barY);
+    ctx.lineTo(barX + playedW, barY);
+    ctx.stroke();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = '#0D99FF';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(barX + playedW, barY, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  const timeStr = `${formatWidgetTime(currentTime)} / ${formatWidgetTime(duration)}`;
+  ctx.fillStyle = '#E5E7EB';
+  ctx.font = "600 11.5px 'Inter', monospace";
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(timeStr, startX + trackW - 16, startY + radius);
+
+  ctx.restore();
 }
 
 function drawWidgetTransportIcons(ctx, centerX, controlsY, color) {

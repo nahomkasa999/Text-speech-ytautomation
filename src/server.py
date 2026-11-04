@@ -242,10 +242,15 @@ async def generate_narration_stream(req: GenerateRequest):
         start_time = time.time()
         audio_segments = []
         sample_rate = 24000
+        chunk_timings = []
+        current_time = 0.0
+
+        p_pause_sec = max(0.1, req.paragraph_pause)
+        s_pause_sec = max(0.05, req.sentence_pause)
 
         # Silence buffers for natural pauses
-        p_silence = np.zeros(int(sample_rate * max(0.1, req.paragraph_pause)), dtype=np.float32)
-        s_silence = np.zeros(int(sample_rate * max(0.05, req.sentence_pause)), dtype=np.float32)
+        p_silence = np.zeros(int(sample_rate * p_pause_sec), dtype=np.float32)
+        s_silence = np.zeros(int(sample_rate * s_pause_sec), dtype=np.float32)
 
         options = {
             "endpoint_url": req.endpoint_url,
@@ -273,12 +278,26 @@ async def generate_narration_stream(req: GenerateRequest):
                 )
                 
                 audio_segments.append(samples)
+                speech_dur = len(samples) / sample_rate
                 
                 # Append appropriate pause
+                pause_dur = p_pause_sec if chunk["is_paragraph_end"] else s_pause_sec
                 if chunk["is_paragraph_end"]:
                     audio_segments.append(p_silence)
                 else:
                     audio_segments.append(s_silence)
+
+                seg_start = current_time
+                seg_end = current_time + speech_dur + pause_dur
+
+                chunk_timings.append({
+                    "start": round(seg_start, 3),
+                    "end": round(seg_end, 3),
+                    "speech_end": round(seg_start + speech_dur, 3),
+                    "text": text_to_speak,
+                    "is_paragraph_end": chunk["is_paragraph_end"]
+                })
+                current_time = seg_end
 
             except Exception as exc:
                 yield f"data: {json.dumps({'status': 'error', 'error': str(exc)})}\n\n"
@@ -311,7 +330,7 @@ async def generate_narration_stream(req: GenerateRequest):
         output_path = os.path.join(AUDIO_DIR, audio_filename)
         sf.write(output_path, final_audio, sample_rate)
 
-        # Save to session history
+        # Save to session history with exact synced segment boundaries
         session_data = session_mgr.save_session(
             title=req.title or "",
             text=req.text,
@@ -319,7 +338,10 @@ async def generate_narration_stream(req: GenerateRequest):
             voice=req.voice,
             speed=req.speed,
             audio_filename=audio_filename,
-            duration_seconds=duration_seconds
+            duration_seconds=duration_seconds,
+            paragraph_pause=req.paragraph_pause,
+            sentence_pause=req.sentence_pause,
+            synced_segments=chunk_timings
         )
 
         yield f"data: {json.dumps({'status': 'completed', 'session': session_data})}\n\n"

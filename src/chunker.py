@@ -82,7 +82,7 @@ def split_into_sentences(text: str) -> List[str]:
 
 def chunk_text_for_narration(text: str, max_chunk_chars: int = 400) -> List[Dict[str, Any]]:
     """
-    Splits long book text into an ordered list of speakable chunks.
+    Splits long book text into an ordered list of speakable sentence chunks.
     Each chunk records:
       - text: the text to speak
       - is_paragraph_end: whether it's the end of a paragraph (for longer natural pause)
@@ -106,37 +106,15 @@ def chunk_text_for_narration(text: str, max_chunk_chars: int = 400) -> List[Dict
         if not sentences:
             continue
 
-        # Group short sentences together if they fit nicely in max_chunk_chars
-        current_chunk = ""
         for s_idx, sentence in enumerate(sentences):
+            sentence = sentence.strip()
+            if not sentence:
+                continue
             is_last_in_para = (s_idx == len(sentences) - 1)
-            
-            if len(current_chunk) + len(sentence) + 1 <= max_chunk_chars:
-                current_chunk = f"{current_chunk} {sentence}".strip()
-            else:
-                if current_chunk:
-                    chunks.append({
-                        "id": chunk_idx,
-                        "text": current_chunk,
-                        "is_paragraph_end": False
-                    })
-                    chunk_idx += 1
-                current_chunk = sentence
-
-            if is_last_in_para and current_chunk:
-                chunks.append({
-                    "id": chunk_idx,
-                    "text": current_chunk,
-                    "is_paragraph_end": True
-                })
-                chunk_idx += 1
-                current_chunk = ""
-
-        if current_chunk:
             chunks.append({
                 "id": chunk_idx,
-                "text": current_chunk,
-                "is_paragraph_end": True
+                "text": sentence,
+                "is_paragraph_end": is_last_in_para
             })
             chunk_idx += 1
 

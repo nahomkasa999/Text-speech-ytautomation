@@ -825,6 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const l = getSelectedLayer();
     if (l) {
       l.y = parseInt(e.target.value) || 0;
+      l.anchorCenterY = l.y + (l.height || 400) / 2;
       interactionMgr.updateSelectionBox();
       renderVideoFrame();
       debouncedSaveDraft();
@@ -849,6 +850,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const l = getSelectedLayer();
       if (l) {
         l.height = Math.max(20, Math.min(1080, parseInt(e.target.value) || 40));
+        l.anchorCenterY = l.y + l.height / 2;
         interactionMgr.updateSelectionBox();
         renderVideoFrame();
         debouncedSaveDraft();
@@ -1308,6 +1310,12 @@ document.addEventListener('DOMContentLoaded', () => {
     renderVideoFrame(cur);
     updatePlayheadPosition(cur, dur);
 
+    // Keep selection box synced if caption layer is selected
+    const selected = getSelectedLayer();
+    if (selected && selected.type === 'transcription') {
+      interactionMgr.updateSelectionBox();
+    }
+
     if (cur >= dur) {
       state.video.isPlaying = false;
       el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
@@ -1487,8 +1495,14 @@ document.addEventListener('DOMContentLoaded', () => {
       scene.layers = [capLayer, playerWidget];
     }
 
-    // Build timeline subtitle segments
-    buildSyncedSegments(sess.text, sess.duration_seconds);
+    // Build timeline subtitle segments (using exact backend timestamps when available)
+    if (Array.isArray(sess.synced_segments) && sess.synced_segments.length > 0) {
+      state.video.syncedSegments = sess.synced_segments;
+      scene.syncedSegments = sess.synced_segments;
+      scene.duration = sess.duration_seconds || 10;
+    } else {
+      buildSyncedSegments(sess.text, sess.duration_seconds, sess.paragraph_pause, sess.sentence_pause);
+    }
 
     renderHistoryList();
     renderLayersList();
@@ -1498,27 +1512,68 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePlayheadPosition(0, sess.duration_seconds || 10);
   };
 
-  const buildSyncedSegments = (text, totalDuration) => {
-    const clean = text.replace(/^[ \t]*#{1,6}\s+/gm, '').replace(/[*_`]/g, '').trim();
-    const rawSentences = clean.match(/[^.!?\n]+[.!?\n]*/g) || [clean];
-    const sentences = rawSentences.map(s => s.trim()).filter(Boolean);
+  const buildSyncedSegments = (text, totalDuration, paragraphPause, sentencePause) => {
+    const pPause = typeof paragraphPause === 'number' ? paragraphPause : (state.paragraphPause || 0.6);
+    const sPause = typeof sentencePause === 'number' ? sentencePause : (state.sentencePause || 0.25);
 
-    if (sentences.length === 0 || !totalDuration) {
-      state.video.syncedSegments = [{ start: 0, end: totalDuration || 10, text: text }];
+    const clean = text.replace(/^[ \t]*#{1,6}\s+/gm, '').replace(/[*_`]/g, '').trim();
+    if (!clean || !totalDuration) {
+      state.video.syncedSegments = [{ start: 0, end: totalDuration || 10, text: clean || text }];
       scene.syncedSegments = state.video.syncedSegments;
       scene.duration = totalDuration || 10;
       return;
     }
 
-    const totalChars = sentences.reduce((acc, s) => acc + s.length, 0);
-    let currentStart = 0;
-    state.video.syncedSegments = sentences.map(s => {
-      const frac = s.length / Math.max(1, totalChars);
-      const segDur = frac * totalDuration;
-      const seg = { start: currentStart, end: currentStart + segDur, text: s };
-      currentStart += segDur;
-      return seg;
+    // Split text into paragraphs
+    const paragraphs = clean.split(/\n\s*\n+/).filter(Boolean);
+    const sentenceList = [];
+
+    paragraphs.forEach((para, pIdx) => {
+      const isLastPara = pIdx === paragraphs.length - 1;
+      const rawSentences = para.match(/[^.!?\n]+[.!?\n]*/g) || [para];
+      const sents = rawSentences.map(s => s.trim().replace(/\n+/g, ' ')).filter(Boolean);
+
+      sents.forEach((sent, sIdx) => {
+        const isParaEnd = sIdx === sents.length - 1;
+        const pause = (isLastPara && isParaEnd) ? 0 : (isParaEnd ? pPause : sPause);
+        sentenceList.push({
+          text: sent,
+          charCount: Math.max(1, sent.length),
+          pauseDuration: pause,
+          isParagraphEnd: isParaEnd
+        });
+      });
     });
+
+    if (sentenceList.length === 0) {
+      state.video.syncedSegments = [{ start: 0, end: totalDuration, text: clean }];
+      scene.syncedSegments = state.video.syncedSegments;
+      scene.duration = totalDuration;
+      return;
+    }
+
+    const totalChars = sentenceList.reduce((acc, s) => acc + s.charCount, 0);
+    const totalPauses = sentenceList.reduce((acc, s) => acc + s.pauseDuration, 0);
+
+    // Available speech time after deducting all paragraph and sentence pauses
+    const netSpeechDuration = Math.max(0.1, totalDuration - totalPauses);
+    const speechRate = netSpeechDuration / Math.max(1, totalChars);
+
+    let currentStart = 0;
+    state.video.syncedSegments = sentenceList.map(s => {
+      const speechDur = s.charCount * speechRate;
+      const segStart = currentStart;
+      const segEnd = segStart + speechDur + s.pauseDuration;
+      currentStart = segEnd;
+      return {
+        start: Math.round(segStart * 100) / 100,
+        end: Math.round(segEnd * 100) / 100,
+        speech_end: Math.round((segStart + speechDur) * 100) / 100,
+        text: s.text,
+        is_paragraph_end: s.isParagraphEnd
+      };
+    });
+
     scene.syncedSegments = state.video.syncedSegments;
     scene.duration = totalDuration;
   };
@@ -1649,12 +1704,22 @@ document.addEventListener('DOMContentLoaded', () => {
   el.pauseParaSlider.addEventListener('input', (e) => {
     state.paragraphPause = parseFloat(e.target.value);
     el.pauseParaVal.textContent = `${state.paragraphPause.toFixed(1)}s`;
+    if (state.activeSession && (!state.activeSession.synced_segments || state.activeSession.synced_segments.length === 0)) {
+      buildSyncedSegments(state.activeSession.text, state.activeSession.duration_seconds, state.paragraphPause, state.sentencePause);
+      buildTimelineRulerAndTracks();
+      renderVideoFrame();
+    }
     debouncedSaveDraft();
   });
 
   el.pauseSentSlider.addEventListener('input', (e) => {
     state.sentencePause = parseFloat(e.target.value);
     el.pauseSentVal.textContent = `${state.sentencePause.toFixed(2)}s`;
+    if (state.activeSession && (!state.activeSession.synced_segments || state.activeSession.synced_segments.length === 0)) {
+      buildSyncedSegments(state.activeSession.text, state.activeSession.duration_seconds, state.paragraphPause, state.sentencePause);
+      buildTimelineRulerAndTracks();
+      renderVideoFrame();
+    }
     debouncedSaveDraft();
   });
 

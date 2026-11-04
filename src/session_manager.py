@@ -52,7 +52,10 @@ class SessionManager:
         voice: str,
         speed: float,
         audio_filename: str,
-        duration_seconds: float
+        duration_seconds: float,
+        paragraph_pause: float = 0.6,
+        sentence_pause: float = 0.25,
+        synced_segments: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         sessions = self._read_db()
         now_ts = time.time()
@@ -75,6 +78,9 @@ class SessionManager:
             "engine": engine,
             "voice": voice,
             "speed": speed,
+            "paragraph_pause": paragraph_pause,
+            "sentence_pause": sentence_pause,
+            "synced_segments": synced_segments or [],
             "word_count": word_count,
             "char_count": char_count,
             "audio_filename": audio_filename,

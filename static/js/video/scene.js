@@ -113,6 +113,7 @@ export class TextLayer extends Layer {
     this.autoShrink = data.autoShrink !== false;
     
     this.fill = data.fill || '#111827';
+    this.anchorCenterY = typeof data.anchorCenterY === 'number' ? data.anchorCenterY : (this.y + (this.height || 400) / 2);
     this.stroke = data.stroke || { color: '#000000', width: 0 };
     this.shadow = data.shadow || { color: 'rgba(0,0,0,0.3)', blur: 0, x: 0, y: 0 };
     
@@ -142,6 +143,7 @@ export class TextLayer extends Layer {
       decoration: this.decoration,
       resizing: this.resizing,
       autoShrink: this.autoShrink,
+      anchorCenterY: this.anchorCenterY,
       fill: this.fill,
       stroke: this.stroke,
       shadow: this.shadow

@@ -125,9 +125,10 @@ export class CanvasInteractionManager {
         py = cy + (dx * sin + dy * cos);
       }
 
-      const layerH = Math.max(25, layer.height || 40);
+      const top = (typeof layer.renderedTop === 'number') ? layer.renderedTop : layer.y;
+      const layerH = (typeof layer.renderedHeight === 'number') ? layer.renderedHeight : Math.max(25, layer.height || 40);
       if (px >= layer.x - pad && px <= layer.x + layer.width + pad &&
-          py >= layer.y - pad && py <= layer.y + layerH + pad) {
+          py >= top - pad && py <= top + layerH + pad) {
         return layer;
       }
     }
@@ -234,6 +235,9 @@ export class CanvasInteractionManager {
 
       this.dragTarget.x = Math.round(newX);
       this.dragTarget.y = Math.round(newY);
+      if (typeof this.dragTarget.anchorCenterY === 'number') {
+        this.dragTarget.anchorCenterY = this.dragTarget.y + (this.dragTarget.height || 400) / 2;
+      }
 
       this.updateSelectionBox();
       this.onRender();
@@ -314,6 +318,7 @@ export class CanvasInteractionManager {
     layer.y = Math.round(newY);
     layer.width = Math.round(newW);
     layer.height = Math.round(newH);
+    layer.anchorCenterY = layer.y + (layer.height || 400) / 2;
 
     // If text layer in auto-height mode, reflow text lines and hug height
     if (layer.type === 'text' || layer.type === 'transcription') {
@@ -421,11 +426,19 @@ export class CanvasInteractionManager {
     const canvasW = this.scene.canvas.width || 1920;
     const canvasH = this.scene.canvas.height || 1080;
 
+    let boxY = layer.y;
+    let boxH = Math.max(20, layer.height || 40);
+
+    if ((layer.type === 'transcription' || layer.verticalAlign === 'middle') && typeof layer.renderedTop === 'number' && typeof layer.renderedHeight === 'number') {
+      boxY = layer.renderedTop;
+      boxH = Math.max(20, layer.renderedHeight);
+    }
+
     this.selectionBoxEl.classList.remove('hidden');
     this.selectionBoxEl.style.left = `${(layer.x / canvasW) * 100}%`;
-    this.selectionBoxEl.style.top = `${(layer.y / canvasH) * 100}%`;
+    this.selectionBoxEl.style.top = `${(boxY / canvasH) * 100}%`;
     this.selectionBoxEl.style.width = `${(layer.width / canvasW) * 100}%`;
-    this.selectionBoxEl.style.height = `${(Math.max(20, layer.height || 40) / canvasH) * 100}%`;
+    this.selectionBoxEl.style.height = `${(boxH / canvasH) * 100}%`;
 
     if (layer.rotation) {
       this.selectionBoxEl.style.transform = `rotate(${layer.rotation}deg)`;
