@@ -269,9 +269,10 @@ function drawTextLayer(ctx, layer) {
   }
 
   let startY = layer.y;
-  if (layer.verticalAlign === 'middle') {
+  const vAlign = layer.verticalAlign || (layer.type === 'transcription' ? 'middle' : 'top');
+  if (vAlign === 'middle') {
     startY = layer.y + (layer.height - layout.totalHeight) / 2;
-  } else if (layer.verticalAlign === 'bottom') {
+  } else if (vAlign === 'bottom') {
     startY = layer.y + (layer.height - layout.totalHeight);
   }
 
@@ -343,9 +344,10 @@ function drawTranscriptionLayer(ctx, layer, scene, currentTime) {
   ctx.textBaseline = 'top';
 
   let startY = layer.y;
-  if (layer.verticalAlign === 'middle') {
+  const vAlign = layer.verticalAlign || (layer.type === 'transcription' ? 'middle' : 'top');
+  if (vAlign === 'middle') {
     startY = layer.y + (layer.height - layout.totalHeight) / 2;
-  } else if (layer.verticalAlign === 'bottom') {
+  } else if (vAlign === 'bottom') {
     startY = layer.y + (layer.height - layout.totalHeight);
   }
 
@@ -458,23 +460,49 @@ function drawShapeLayer(ctx, layer) {
 }
 
 /**
- * Aesthetic Audio Player Bar Widget Overlay
+ * Aesthetic Audio Player Bar Widget Overlay with Multiple Templates
  */
 function drawAudioWidgetLayer(ctx, layer, scene, currentTime) {
   const duration = scene.duration || 10;
   const progress = Math.min(1, Math.max(0, currentTime / duration));
 
+  const color = layer.color || '#111827';
+  const style = layer.widgetStyle || 'classic';
+
+  ctx.save();
+
+  switch (style) {
+    case 'waveform':
+      drawWaveformWidget(ctx, layer, progress, color, currentTime, duration);
+      break;
+    case 'capsule':
+      drawCapsuleWidget(ctx, layer, progress, color, currentTime, duration);
+      break;
+    case 'glow_line':
+      drawGlowLineWidget(ctx, layer, progress, color);
+      break;
+    case 'minimal_dots':
+      drawMinimalDotsWidget(ctx, layer, progress, color);
+      break;
+    case 'classic':
+    default:
+      drawClassicLineWidget(ctx, layer, progress, color);
+      break;
+  }
+
+  ctx.restore();
+}
+
+function drawClassicLineWidget(ctx, layer, progress, color) {
   const startX = layer.x;
   const startY = layer.y;
   const trackW = layer.width;
   const barY = startY + 12;
-  const color = layer.color || '#111827';
   const thickness = layer.thickness || 2.5;
 
-  ctx.save();
-
-  // Background track (subtle / thin line)
+  // Background track (subtle stroke)
   ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.35;
   ctx.lineWidth = thickness;
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -482,53 +510,233 @@ function drawAudioWidgetLayer(ctx, layer, scene, currentTime) {
   ctx.lineTo(startX + trackW, barY);
   ctx.stroke();
 
-  // Scrubber ball at current progress (refined radius)
+  // Played track (accented solid)
+  ctx.globalAlpha = 1.0;
+  ctx.beginPath();
+  ctx.moveTo(startX, barY);
+  ctx.lineTo(startX + (trackW * progress), barY);
+  ctx.stroke();
+
+  // Scrubber ball at current progress
   const ballX = startX + (trackW * progress);
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(ballX, barY, layer.playheadRadius || 7, 0, Math.PI * 2);
   ctx.fill();
 
-  // Sleek transport control icons underneath (thin strokes, never bulky filled shapes)
   if (layer.showControls) {
-    const controlsY = barY + 36;
-    const centerX = startX + trackW / 2;
+    drawWidgetTransportIcons(ctx, startX + trackW / 2, barY + 36, color);
+  }
+}
 
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2.0;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+function drawWaveformWidget(ctx, layer, progress, color, currentTime, duration) {
+  const startX = layer.x;
+  const startY = layer.y;
+  const trackW = layer.width;
+  const barCount = 42;
+  const barW = (trackW / barCount) * 0.65;
+  const gap = (trackW / barCount) * 0.35;
+  const centerY = startY + 28;
 
-    // Previous Arrow Outline
-    ctx.beginPath();
-    ctx.moveTo(centerX - 46, controlsY - 9);
-    ctx.lineTo(centerX - 56, controlsY);
-    ctx.lineTo(centerX - 46, controlsY + 9);
-    ctx.moveTo(centerX - 56, controlsY - 9);
-    ctx.lineTo(centerX - 66, controlsY);
-    ctx.lineTo(centerX - 56, controlsY + 9);
-    ctx.stroke();
+  for (let i = 0; i < barCount; i++) {
+    const frac = i / (barCount - 1);
+    // Deterministic organic wave envelope
+    const rawH = 8 + Math.abs(Math.sin(i * 0.45) * 22 + Math.cos(i * 0.9) * 14);
+    const h = Math.max(6, Math.min(46, rawH));
+    const bx = startX + i * (barW + gap);
+    const by = centerY - h / 2;
 
-    // Sleek Pause Bars
-    ctx.beginPath();
-    ctx.moveTo(centerX - 5, controlsY - 9);
-    ctx.lineTo(centerX - 5, controlsY + 9);
-    ctx.moveTo(centerX + 5, controlsY - 9);
-    ctx.lineTo(centerX + 5, controlsY + 9);
-    ctx.stroke();
+    const isPlayed = frac <= progress;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = isPlayed ? 1.0 : 0.28;
 
-    // Next Arrow Outline
-    ctx.beginPath();
-    ctx.moveTo(centerX + 46, controlsY - 9);
-    ctx.lineTo(centerX + 56, controlsY);
-    ctx.lineTo(centerX + 46, controlsY + 9);
-    ctx.moveTo(centerX + 56, controlsY - 9);
-    ctx.lineTo(centerX + 66, controlsY);
-    ctx.lineTo(centerX + 56, controlsY + 9);
-    ctx.stroke();
+    drawRoundedRectPath(ctx, bx, by, barW, h, barW / 2);
+    ctx.fill();
   }
 
+  // Transport under waveform
+  if (layer.showControls) {
+    drawWidgetTransportIcons(ctx, startX + trackW / 2, centerY + 36, color);
+  }
+}
+
+function drawCapsuleWidget(ctx, layer, progress, color, currentTime, duration) {
+  const startX = layer.x;
+  const startY = layer.y;
+  const trackW = layer.width;
+  const capsuleH = 54;
+  const radius = capsuleH / 2;
+
+  // Dark frosted pill container
+  ctx.fillStyle = 'rgba(24, 24, 27, 0.88)';
+  drawRoundedRectPath(ctx, startX, startY, trackW, capsuleH, radius);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Play icon circle on left
+  const playCx = startX + 28;
+  const playCy = startY + radius;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(playCx, playCy, 14, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Play triangle inside circle
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.moveTo(playCx - 3, playCy - 6);
+  ctx.lineTo(playCx + 5, playCy);
+  ctx.lineTo(playCx - 3, playCy + 6);
+  ctx.closePath();
+  ctx.fill();
+
+  // Middle scrub track
+  const barX = startX + 54;
+  const barY = startY + radius;
+  const barW = Math.max(50, trackW - 170);
+
+  // Background line
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(barX, barY);
+  ctx.lineTo(barX + barW, barY);
+  ctx.stroke();
+
+  // Progress line
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(barX, barY);
+  ctx.lineTo(barX + (barW * progress), barY);
+  ctx.stroke();
+
+  // Head dot
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.arc(barX + (barW * progress), barY, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Timecode on right
+  const timeStr = `${formatWidgetTime(currentTime)} / ${formatWidgetTime(duration)}`;
+  ctx.fillStyle = '#F3F4F6';
+  ctx.font = "600 12px 'Inter', monospace";
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(timeStr, startX + trackW - 18, startY + radius);
+}
+
+function drawGlowLineWidget(ctx, layer, progress, color) {
+  const startX = layer.x;
+  const startY = layer.y;
+  const trackW = layer.width;
+  const barY = startY + 14;
+
+  // Background track
+  ctx.strokeStyle = 'rgba(150, 150, 150, 0.25)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(startX, barY);
+  ctx.lineTo(startX + trackW, barY);
+  ctx.stroke();
+
+  // Glowing played track
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(startX, barY);
+  ctx.lineTo(startX + (trackW * progress), barY);
+  ctx.stroke();
+
+  // Glowing playhead ring
+  const ballX = startX + (trackW * progress);
+  ctx.fillStyle = color;
+  ctx.shadowBlur = 16;
+  ctx.beginPath();
+  ctx.arc(ballX, barY, 8, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
+
+  if (layer.showControls) {
+    drawWidgetTransportIcons(ctx, startX + trackW / 2, barY + 36, color);
+  }
+}
+
+function drawMinimalDotsWidget(ctx, layer, progress, color) {
+  const startX = layer.x;
+  const startY = layer.y;
+  const trackW = layer.width;
+  const dotCount = 28;
+  const barY = startY + 14;
+  const step = trackW / (dotCount - 1);
+
+  for (let i = 0; i < dotCount; i++) {
+    const frac = i / (dotCount - 1);
+    const cx = startX + i * step;
+    const isPlayed = frac <= progress;
+
+    ctx.fillStyle = color;
+    ctx.globalAlpha = isPlayed ? 1.0 : 0.25;
+    ctx.beginPath();
+    ctx.arc(cx, barY, isPlayed ? 4.5 : 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (layer.showControls) {
+    drawWidgetTransportIcons(ctx, startX + trackW / 2, barY + 36, color);
+  }
+}
+
+function drawWidgetTransportIcons(ctx, centerX, controlsY, color) {
+  ctx.save();
+  ctx.globalAlpha = 1.0;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.0;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Previous Arrow Outline
+  ctx.beginPath();
+  ctx.moveTo(centerX - 46, controlsY - 9);
+  ctx.lineTo(centerX - 56, controlsY);
+  ctx.lineTo(centerX - 46, controlsY + 9);
+  ctx.moveTo(centerX - 56, controlsY - 9);
+  ctx.lineTo(centerX - 66, controlsY);
+  ctx.lineTo(centerX - 56, controlsY + 9);
+  ctx.stroke();
+
+  // Sleek Pause Bars
+  ctx.beginPath();
+  ctx.moveTo(centerX - 5, controlsY - 9);
+  ctx.lineTo(centerX - 5, controlsY + 9);
+  ctx.moveTo(centerX + 5, controlsY - 9);
+  ctx.lineTo(centerX + 5, controlsY + 9);
+  ctx.stroke();
+
+  // Next Arrow Outline
+  ctx.beginPath();
+  ctx.moveTo(centerX + 46, controlsY - 9);
+  ctx.lineTo(centerX + 56, controlsY);
+  ctx.lineTo(centerX + 46, controlsY + 9);
+  ctx.moveTo(centerX + 56, controlsY - 9);
+  ctx.lineTo(centerX + 66, controlsY);
+  ctx.lineTo(centerX + 56, controlsY + 9);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function formatWidgetTime(sec) {
+  const s = Math.floor(sec || 0);
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m.toString().padStart(2, '0')}:${rem.toString().padStart(2, '0')}`;
 }
 
 /**

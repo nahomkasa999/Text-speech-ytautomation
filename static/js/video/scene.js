@@ -156,7 +156,9 @@ export class TranscriptionLayer extends TextLayer {
     this.endTime = 999999;
     this.name = data.name || 'Synced Captions';
     this.text = data.text || 'let me say that again your emotions are not your friend';
-    this.maxLines = typeof data.maxLines === 'number' ? data.maxLines : 3;
+    this.height = typeof data.height === 'number' ? Math.max(data.height, 400) : 420;
+    this.verticalAlign = data.verticalAlign || 'middle';
+    this.maxLines = typeof data.maxLines === 'number' ? data.maxLines : 4;
     this.wordsPerChunk = typeof data.wordsPerChunk === 'number' ? data.wordsPerChunk : 8;
     this.highlightActiveWord = data.highlightActiveWord !== false;
     this.activeWordColor = data.activeWordColor || '#0D99FF';
@@ -169,6 +171,7 @@ export class TranscriptionLayer extends TextLayer {
     return {
       ...super.toJSON(),
       type: 'transcription',
+      verticalAlign: this.verticalAlign,
       maxLines: this.maxLines,
       wordsPerChunk: this.wordsPerChunk,
       highlightActiveWord: this.highlightActiveWord,
@@ -227,6 +230,7 @@ export class AudioWidgetLayer extends Layer {
     this.type = 'audio_widget';
     this.endTime = 999999;
     this.name = data.name || 'Audio Player Bar';
+    this.widgetStyle = data.widgetStyle || 'classic'; // 'classic' | 'waveform' | 'capsule' | 'glow_line' | 'minimal_dots'
     this.color = data.color || '#111827';
     this.thickness = typeof data.thickness === 'number' ? data.thickness : 4;
     this.showControls = data.showControls !== false;
@@ -237,6 +241,7 @@ export class AudioWidgetLayer extends Layer {
     return {
       ...super.toJSON(),
       type: 'audio_widget',
+      widgetStyle: this.widgetStyle,
       color: this.color,
       thickness: this.thickness,
       showControls: this.showControls,

@@ -527,19 +527,33 @@ Drag & drop any .txt or .md file right here..."></textarea>
             </div>
           </div>
 
-          <!-- Text Alignments (Left, Center, Right) -->
+          <!-- Text Alignments (Horizontal & Vertical) -->
           <div class="setting-group" id="alignment-settings-group">
-            <label class="setting-label">Text Alignment</label>
-            <div class="segmented-control" id="align-control">
-              <button class="segment-btn active" data-align="left" title="Align Left">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/></svg>
-              </button>
-              <button class="segment-btn" data-align="center" title="Align Center">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="5" y1="18" x2="19" y2="18"/></svg>
-              </button>
-              <button class="segment-btn" data-align="right" title="Align Right">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="6" y1="18" x2="20" y2="18"/></svg>
-              </button>
+            <label class="setting-label">Text Alignment (Horizontal / Vertical)</label>
+            <div class="figma-grid-2">
+              <div class="segmented-control" id="align-control">
+                <button class="segment-btn active" data-align="left" title="Align Left">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/></svg>
+                </button>
+                <button class="segment-btn" data-align="center" title="Align Center">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="5" y1="18" x2="19" y2="18"/></svg>
+                </button>
+                <button class="segment-btn" data-align="right" title="Align Right">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="6" y1="18" x2="20" y2="18"/></svg>
+                </button>
+              </div>
+
+              <div class="segmented-control" id="valign-control">
+                <button class="segment-btn" data-valign="top" title="Top Align">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="4" x2="21" y2="4"/><rect x="7" y="8" width="10" height="11" rx="1"/></svg>
+                </button>
+                <button class="segment-btn active" data-valign="middle" title="Center Vertically (Expands equally in both directions)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><rect x="7" y="6" width="10" height="12" rx="1"/></svg>
+                </button>
+                <button class="segment-btn" data-valign="bottom" title="Bottom Align">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="20" x2="21" y2="20"/><rect x="7" y="5" width="10" height="11" rx="1"/></svg>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -564,11 +578,38 @@ Drag & drop any .txt or .md file right here..."></textarea>
 
           <div class="divider"></div>
 
-          <!-- Aesthetic Player Widget Toggle -->
-          <div class="setting-group">
+          <!-- Aesthetic Player Widget Toggle & Style Template Selector -->
+          <div class="setting-group" id="player-widget-section">
             <div class="checkbox-row">
               <input type="checkbox" id="toggle-player-widget" checked class="form-checkbox" />
               <label for="toggle-player-widget" class="checkbox-label">Aesthetic Audio Bar Widget</label>
+            </div>
+
+            <!-- Audio Bar Template Selector -->
+            <div id="audio-widget-templates-group" style="margin-top: 10px;">
+              <label class="setting-label">Audio Bar Style Template</label>
+              <div class="widget-template-grid" id="widget-template-picker">
+                <button class="widget-tmpl-btn active" data-style="classic" title="Classic Progress Line">
+                  <span class="tmpl-icon">—●—</span>
+                  <span class="tmpl-label">Classic</span>
+                </button>
+                <button class="widget-tmpl-btn" data-style="waveform" title="Aesthetic Sound Waves">
+                  <span class="tmpl-icon">ılılı</span>
+                  <span class="tmpl-label">Waves</span>
+                </button>
+                <button class="widget-tmpl-btn" data-style="capsule" title="Floating Capsule Player">
+                  <span class="tmpl-icon">◖▶—◗</span>
+                  <span class="tmpl-label">Capsule</span>
+                </button>
+                <button class="widget-tmpl-btn" data-style="glow_line" title="Cyber Glow Line">
+                  <span class="tmpl-icon">━●━</span>
+                  <span class="tmpl-label">Glow</span>
+                </button>
+                <button class="widget-tmpl-btn" data-style="minimal_dots" title="Segmented Dots">
+                  <span class="tmpl-icon">•••••</span>
+                  <span class="tmpl-label">Dots</span>
+                </button>
+              </div>
             </div>
           </div>
 

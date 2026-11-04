@@ -226,9 +226,12 @@ document.addEventListener('DOMContentLoaded', () => {
     captionColorPicker: document.getElementById('caption-color-picker'),
     colorPresetBtns: document.querySelectorAll('.color-preset-btn'),
     alignBtns: document.querySelectorAll('#align-control .segment-btn'),
+    valignBtns: document.querySelectorAll('#valign-control .segment-btn'),
     casingBtns: document.querySelectorAll('#casing-settings-group .segment-btn'),
     weightBtns: document.querySelectorAll('#weight-settings-group .segment-btn'),
     togglePlayerWidget: document.getElementById('toggle-player-widget'),
+    playerWidgetSection: document.getElementById('player-widget-section'),
+    widgetTmplBtns: document.querySelectorAll('.widget-tmpl-btn'),
   };
 
   const canvasCtx = el.videoCanvas.getContext('2d');
@@ -701,6 +704,12 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('casing-settings-group').classList.add('hidden');
       document.getElementById('weight-settings-group').classList.add('hidden');
       el.togglePlayerWidget.checked = l.visible;
+
+      // Sync active widget template button
+      const curStyle = l.widgetStyle || 'classic';
+      el.widgetTmplBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.style === curStyle);
+      });
     } else {
       el.typographySettingsGroup.classList.remove('hidden');
       document.getElementById('alignment-settings-group').classList.remove('hidden');
@@ -712,6 +721,8 @@ document.addEventListener('DOMContentLoaded', () => {
       el.captionColorPicker.value = l.fill || '#111827';
 
       el.alignBtns.forEach(b => b.classList.toggle('active', b.dataset.align === (l.align || 'left')));
+      const vAlign = l.verticalAlign || (l.type === 'transcription' ? 'middle' : 'top');
+      el.valignBtns.forEach(b => b.classList.toggle('active', b.dataset.valign === vAlign));
       el.casingBtns.forEach(b => b.classList.toggle('active', b.dataset.casing === (l.casing || 'none') || (b.dataset.casing === 'normal' && l.casing === 'none') || (b.dataset.casing === 'lower' && l.casing === 'lower')));
       el.weightBtns.forEach(b => b.classList.toggle('active', b.dataset.weight === (String(l.fontWeight) || '700')));
     }
@@ -902,6 +913,33 @@ document.addEventListener('DOMContentLoaded', () => {
         l.align = btn.dataset.align;
         renderVideoFrame();
         debouncedSaveDraft();
+      }
+    });
+  });
+
+  el.valignBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const l = getSelectedLayer();
+      if (l) {
+        el.valignBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        l.verticalAlign = btn.dataset.valign;
+        renderVideoFrame();
+        debouncedSaveDraft();
+      }
+    });
+  });
+
+  el.widgetTmplBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const widget = scene.getLayer('layer_player_widget') || scene.layers.find(ly => ly.type === 'audio_widget');
+      if (widget) {
+        el.widgetTmplBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        widget.widgetStyle = btn.dataset.style;
+        renderVideoFrame();
+        debouncedSaveDraft();
+        showToast(`Widget template: ${btn.dataset.style}`, 'info');
       }
     });
   });
