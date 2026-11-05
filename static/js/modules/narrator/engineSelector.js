@@ -63,6 +63,9 @@ export class EngineSelector {
         this.el.engineTabs.forEach(t => t.classList.toggle('active', t.dataset.engine === this.state.engine));
         this.el.panelDeployedSettings.classList.toggle('hidden', this.state.engine !== 'deployed');
         this.el.panelCloudSettings.classList.toggle('hidden', this.state.engine !== 'cloud_api');
+        if (this.el.panelVoiceDesignSettings) {
+          this.el.panelVoiceDesignSettings.classList.toggle('hidden', this.state.engine !== 'voice_design');
+        }
         this.renderVoices();
         this.onEngineChanged?.();
       });

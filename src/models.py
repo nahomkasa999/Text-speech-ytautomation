@@ -50,3 +50,11 @@ class DeleteSessionRequest(BaseModel):
 class UpdateSessionRequest(BaseModel):
     session_id: str
     bg_image: Optional[str] = None
+
+class CreateVoiceDesignRequest(BaseModel):
+    api_key: str
+    description: str
+    display_name: Optional[str] = "Custom Persona"
+    gender: Optional[str] = "male"
+    language_code: Optional[str] = "en-US"
+    model: Optional[str] = "gemini-3.8-flash-tts"

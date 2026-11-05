@@ -56,7 +56,9 @@ export class NarrationGenerator {
       endpoint_url: this.el.deployedEndpoint ? this.el.deployedEndpoint.value.trim() : '',
       api_key: this.state.engine === 'deployed'
         ? (this.el.deployedToken ? this.el.deployedToken.value.trim() : '')
-        : (this.el.cloudApiKey ? this.el.cloudApiKey.value.trim() : ''),
+        : (this.state.engine === 'voice_design'
+            ? (this.el.geminiApiKey?.value.trim() || localStorage.getItem('book_narrator_gemini_api_key') || '')
+            : (this.el.cloudApiKey ? this.el.cloudApiKey.value.trim() : '')),
       instruction: this.el.deployedInstruction ? this.el.deployedInstruction.value.trim() : '',
       cloud_provider: this.el.cloudProvider ? this.el.cloudProvider.value : 'openai'
     };

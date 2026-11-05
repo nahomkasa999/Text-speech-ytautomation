@@ -21,7 +21,9 @@ export function setupVoicePreview({ el, state }) {
       endpoint_url: el.deployedEndpoint ? el.deployedEndpoint.value.trim() : '',
       api_key: state.engine === 'deployed'
         ? (el.deployedToken ? el.deployedToken.value.trim() : '')
-        : (el.cloudApiKey ? el.cloudApiKey.value.trim() : ''),
+        : (state.engine === 'voice_design'
+            ? (el.geminiApiKey?.value.trim() || localStorage.getItem('book_narrator_gemini_api_key') || '')
+            : (el.cloudApiKey ? el.cloudApiKey.value.trim() : '')),
       instruction: el.deployedInstruction ? el.deployedInstruction.value.trim() : '',
       cloud_provider: el.cloudProvider ? el.cloudProvider.value : 'openai'
     };

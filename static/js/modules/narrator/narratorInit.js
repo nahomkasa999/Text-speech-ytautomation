@@ -12,6 +12,7 @@ import { setupPauseAndSpeedControls } from './pauseControls.js';
 import { DraftService } from '../services/draftService.js';
 import { ModeSwitcher } from '../ui/modeSwitcher.js';
 import { ExportManager } from '../studio/exporter/exportManager.js';
+import { VoiceDesignManager } from './voiceDesign.js';
 
 export function createNarratorSubsystem({ el, state, scene, studio }) {
   const refreshStats = () => updateTextStats(el.bookText, state.speed, el.statWords, el.statChars, el.statTime);
@@ -47,6 +48,14 @@ export function createNarratorSubsystem({ el, state, scene, studio }) {
   });
 
   setupVoicePreview({ el, state });
+
+  new VoiceDesignManager({
+    el, state,
+    callbacks: {
+      renderVoices: () => engineSelector.renderVoices(),
+      onVoiceCreated: () => draftService.debouncedSaveDraft()
+    }
+  });
 
   new NarrationGenerator({
     el, state,
