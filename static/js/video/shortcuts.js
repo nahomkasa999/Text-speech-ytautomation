@@ -1,5 +1,5 @@
 /**
- * Keyboard shortcuts for Studio panel toggles and Zen Mode.
+ * Keyboard shortcuts for Studio panel toggles, Undo/Redo, and Zen Mode.
  */
 
 export function initPanelShortcuts(manager) {
@@ -26,6 +26,18 @@ export function initPanelShortcuts(manager) {
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyJ') {
       e.preventDefault();
       manager.toggleTimeline();
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || (e.shiftKey && e.code === 'KeyZ'))) {
+      e.preventDefault();
+      document.getElementById('btn-redo')?.click();
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.code === 'KeyZ' && !ctrlKPressed) {
+      e.preventDefault();
+      document.getElementById('btn-undo')?.click();
       return;
     }
 

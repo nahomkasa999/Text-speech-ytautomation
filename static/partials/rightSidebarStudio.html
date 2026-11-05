@@ -1,0 +1,204 @@
+<!-- TAB 2 SETTINGS: FIGMA-STYLE FRAME & PROPERTY INSPECTOR (Active in Video Mode) -->
+<div id="panel-video-settings" class="settings-subview hidden">
+  <div class="sidebar-header">
+    <span class="sidebar-heading">Layer Properties</span>
+  </div>
+
+  <div class="settings-scroll-area">
+    <!-- Layer Selector List -->
+    <div class="setting-group">
+      <label class="setting-label">Selected Layer</label>
+      <div id="layers-list" class="layers-stack"></div>
+      <button id="btn-inspector-restore-captions" class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 8px; display: none; align-items: center; justify-content: center; gap: 6px;" title="Restore missing or deleted captions">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+        <span>Restore Synced Captions</span>
+      </button>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Custom Text Editor (if custom text layer selected) -->
+    <div id="custom-text-editor-group" class="setting-group hidden">
+      <label class="setting-label" for="layer-content-input">Text Content</label>
+      <input type="text" id="layer-content-input" class="form-input" placeholder="Enter text..." />
+      <button id="btn-delete-layer" class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 8px; color: var(--accent-danger); display: flex; align-items: center; justify-content: center; gap: 6px;" title="Delete selected text layer">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>Delete Layer</span>
+      </button>
+    </div>
+
+    <!-- Figma Frame Coordinates (X, Y, Width, Height) -->
+    <div class="setting-group">
+      <label class="setting-label">Frame Position & Size</label>
+      <div class="figma-grid-2">
+        <div class="num-input-wrap">
+          <span class="num-prefix">X</span>
+          <input type="number" id="prop-pos-x" class="form-input-num" value="900" step="10" />
+        </div>
+        <div class="num-input-wrap">
+          <span class="num-prefix">Y</span>
+          <input type="number" id="prop-pos-y" class="form-input-num" value="240" step="10" />
+        </div>
+      </div>
+      <div class="figma-grid-2" style="margin-top: 6px;">
+        <div class="num-input-wrap">
+          <span class="num-prefix">W</span>
+          <input type="number" id="prop-size-w" class="form-input-num" value="920" step="20" />
+        </div>
+        <div class="num-input-wrap">
+          <span class="num-prefix">H</span>
+          <input type="number" id="prop-size-h" class="form-input-num" value="120" step="10" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Typography Settings -->
+    <div class="setting-group" id="typography-settings-group">
+      <label class="setting-label" for="caption-font-select">Font Family</label>
+      <select id="caption-font-select" class="form-select">
+        <option value="'Merriweather', serif" selected>Merriweather (Classic Serif)</option>
+        <option value="'Playfair Display', serif">Playfair Display (Literary Elegance)</option>
+        <option value="'Cinzel', serif">Cinzel (Antique & Philosophy)</option>
+        <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans (Clean Modern)</option>
+        <option value="'Inter', sans-serif">Inter (Punchy Neutral)</option>
+        <option value="'Oswald', sans-serif">Oswald (Bold Display)</option>
+      </select>
+
+      <div class="figma-grid-2" style="margin-top: 8px;">
+        <div class="num-input-wrap">
+          <span class="num-prefix">Size</span>
+          <input type="number" id="caption-size-num" class="form-input-num" min="16" max="140" value="54" />
+        </div>
+        <div class="num-input-wrap">
+          <span class="num-prefix">Color</span>
+          <input type="color" id="caption-color-picker" value="#111827" class="color-picker-input-bar" />
+        </div>
+      </div>
+
+      <div class="color-presets" style="margin-top: 6px;">
+        <button class="color-preset-btn" data-color="#111827" style="background: #111827;" title="Charcoal Black"></button>
+        <button class="color-preset-btn" data-color="#ffffff" style="background: #ffffff;" title="Pure White"></button>
+        <button class="color-preset-btn" data-color="#fef3c7" style="background: #fef3c7;" title="Warm Cream"></button>
+        <button class="color-preset-btn" data-color="#fbbf24" style="background: #fbbf24;" title="Gold Highlight"></button>
+      </div>
+    </div>
+
+    <!-- Text Alignments -->
+    <div class="setting-group" id="alignment-settings-group">
+      <label class="setting-label">Text Alignment (Horizontal / Vertical)</label>
+      <div class="figma-grid-2">
+        <div class="segmented-control" id="align-control">
+          <button class="segment-btn active" data-align="left" title="Align Left">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/></svg>
+          </button>
+          <button class="segment-btn" data-align="center" title="Align Center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="5" y1="18" x2="19" y2="18"/></svg>
+          </button>
+          <button class="segment-btn" data-align="right" title="Align Right">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="6" y1="18" x2="20" y2="18"/></svg>
+          </button>
+        </div>
+
+        <div class="segmented-control" id="valign-control">
+          <button class="segment-btn" data-valign="top" title="Top Align">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="4" x2="21" y2="4"/><rect x="7" y="8" width="10" height="11" rx="1"/></svg>
+          </button>
+          <button class="segment-btn active" data-valign="middle" title="Center Vertically">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><rect x="7" y="6" width="10" height="12" rx="1"/></svg>
+          </button>
+          <button class="segment-btn" data-valign="bottom" title="Bottom Align">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="20" x2="21" y2="20"/><rect x="7" y="5" width="10" height="11" rx="1"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Text Casing & Font Weight -->
+    <div class="setting-group" id="casing-settings-group">
+      <label class="setting-label">Text Case</label>
+      <div class="segmented-control">
+        <button class="segment-btn active" data-casing="lower">lowercase</button>
+        <button class="segment-btn" data-casing="normal">Normal</button>
+        <button class="segment-btn" data-casing="upper">UPPER</button>
+      </div>
+    </div>
+
+    <div class="setting-group" id="weight-settings-group">
+      <label class="setting-label">Font Weight</label>
+      <div class="segmented-control">
+        <button class="segment-btn" data-weight="400">Regular</button>
+        <button class="segment-btn active" data-weight="700">Bold</button>
+        <button class="segment-btn" data-weight="900">Black</button>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Aesthetic Player Widget Toggle & Style Template Selector -->
+    <div class="setting-group" id="player-widget-section">
+      <div class="checkbox-row">
+        <input type="checkbox" id="toggle-player-widget" checked class="form-checkbox" />
+        <label for="toggle-player-widget" class="checkbox-label">Aesthetic Audio Bar Widget</label>
+      </div>
+
+      <div id="audio-widget-templates-group" style="margin-top: 10px;">
+        <label class="setting-label">Audio Bar Style Template</label>
+        <div class="widget-template-grid" id="widget-template-picker">
+          <button class="widget-tmpl-btn active" data-style="classic" title="Classic Progress Line">
+            <span class="tmpl-icon">—●—</span>
+            <span class="tmpl-label">Classic</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="waveform" title="Aesthetic Sound Waves">
+            <span class="tmpl-icon">ılılı</span>
+            <span class="tmpl-label">Waves</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="capsule" title="Floating Capsule Player">
+            <span class="tmpl-icon">◖▶—◗</span>
+            <span class="tmpl-label">Capsule</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="glow_line" title="Cyber Glow Line">
+            <span class="tmpl-icon">━●━</span>
+            <span class="tmpl-label">Glow</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="minimal_dots" title="Segmented Dots">
+            <span class="tmpl-icon">•••••</span>
+            <span class="tmpl-label">Dots</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="equalizer" title="Graphic Spectrum Equalizer">
+            <span class="tmpl-icon">▅█▃▆</span>
+            <span class="tmpl-label">Equalizer</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="gradient_pill" title="Modern Gradient Pill">
+            <span class="tmpl-icon">▬▬●▬</span>
+            <span class="tmpl-label">Modern</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Audio Track Properties (CapCut Inspector) -->
+    <div id="inspector-audio-group" class="setting-group">
+      <label class="setting-label">Audio Track Properties</label>
+      <div class="sub-slider-item">
+        <div class="sub-slider-header">
+          <span>Speed</span>
+          <span id="inspector-speed-val" class="slider-val">1.00x</span>
+        </div>
+        <input type="range" id="inspector-speed-slider" min="0.5" max="2.5" step="0.05" value="1.0" class="form-range" />
+      </div>
+      <div class="sub-slider-item" style="margin-top: 8px;">
+        <div class="sub-slider-header">
+          <span>Volume</span>
+          <span id="inspector-volume-val" class="slider-val">100%</span>
+        </div>
+        <input type="range" id="inspector-volume-slider" min="0" max="1" step="0.05" value="1.0" class="form-range" />
+      </div>
+      <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+        <label class="setting-label" style="margin: 0; cursor: pointer;" for="check-pitch-correction">Preserve Pitch</label>
+        <input type="checkbox" id="check-pitch-correction" checked style="cursor: pointer;" />
+      </div>
+    </div>
+  </div>
+</div>

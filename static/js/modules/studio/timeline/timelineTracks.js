@@ -6,6 +6,7 @@ import { formatTimecode } from '../../ui/timeFormat.js';
 
 export function renderSubtitleBlocks(laneSubtitlesEl, syncedSegments, duration) {
   const dur = duration || 10;
+  if (!laneSubtitlesEl) return;
   laneSubtitlesEl.innerHTML = '';
 
   syncedSegments.forEach((seg, idx) => {
@@ -19,6 +20,29 @@ export function renderSubtitleBlocks(laneSubtitlesEl, syncedSegments, duration) 
     block.title = seg.text;
     block.dataset.idx = idx;
     laneSubtitlesEl.appendChild(block);
+  });
+}
+
+export function renderMediaClips(laneMediaEl, layers, duration, onSelectClip) {
+  if (!laneMediaEl) return;
+  const dur = duration || 10;
+  laneMediaEl.innerHTML = '';
+
+  const mediaLayers = layers.filter(l => (l.type === 'image' || l.type === 'video' || l.type === 'text') && l.id !== 'layer_captions');
+  mediaLayers.forEach(l => {
+    const start = l.startTime || 0;
+    const end = l.endTime || dur;
+    const block = document.createElement('div');
+    block.className = `media-clip-block clip-${l.type}`;
+    block.style.left = `${(start / dur) * 100}%`;
+    block.style.width = `${Math.max(3, ((end - start) / dur) * 100)}%`;
+    const icon = l.type === 'video' ? '🎬' : (l.type === 'image' ? '🖼️' : '📝');
+    block.innerHTML = `<span class="clip-icon">${icon}</span> <span class="clip-name">${l.name || l.type}</span>`;
+    block.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onSelectClip?.(l.id);
+    });
+    laneMediaEl.appendChild(block);
   });
 }
 
@@ -41,10 +65,12 @@ export function updatePlayheadPosition({
   const zenTimecode = document.getElementById('zen-timecode');
   if (zenTimecode) zenTimecode.textContent = timeStr;
 
-  const blocks = laneSubtitlesEl.querySelectorAll('.caption-block');
-  syncedSegments.forEach((seg, i) => {
-    if (blocks[i]) {
-      blocks[i].classList.toggle('active', cur >= seg.start && cur <= seg.end);
-    }
-  });
+  if (laneSubtitlesEl) {
+    const blocks = laneSubtitlesEl.querySelectorAll('.caption-block');
+    syncedSegments.forEach((seg, i) => {
+      if (blocks[i]) {
+        blocks[i].classList.toggle('active', cur >= seg.start && cur <= seg.end);
+      }
+    });
+  }
 }

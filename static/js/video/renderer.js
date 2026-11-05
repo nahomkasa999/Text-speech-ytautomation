@@ -5,8 +5,9 @@
 
 import { formatTextCasing, measureTextLayout } from './textMeasurement.js';
 import { drawTextLayer, drawTranscriptionLayer } from './renderTextLayer.js';
-import { drawShapeLayer, drawImageLayer, drawFrameLayer } from './renderShapeLayer.js';
+import { drawShapeLayer, drawImageLayer, drawVideoLayer, drawFrameLayer } from './renderShapeLayer.js';
 import { drawAudioWidgetLayer } from './renderAudioWidget.js';
+import { applyLayerTransition } from './transitions.js';
 
 export { formatTextCasing, measureTextLayout };
 
@@ -43,6 +44,7 @@ export function renderScene(ctx, scene, options = {}) {
   activeLayers.forEach(layer => {
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, layer.opacity ?? 1));
+    applyLayerTransition(ctx, layer, currentTime);
 
     const cx = layer.x + layer.width / 2;
     const cy = layer.y + layer.height / 2;
@@ -65,6 +67,9 @@ export function renderScene(ctx, scene, options = {}) {
         break;
       case 'image':
         drawImageLayer(ctx, layer);
+        break;
+      case 'video':
+        drawVideoLayer(ctx, layer, currentTime);
         break;
       case 'shape':
         drawShapeLayer(ctx, layer);

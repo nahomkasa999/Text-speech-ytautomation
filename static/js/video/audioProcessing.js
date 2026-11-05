@@ -1,5 +1,5 @@
 /**
- * Audio decoding and pitch-preserving time-stretching (WSOLA).
+ * Audio decoding and pitch-preserving time-stretching (WSOLA), and audio mixing.
  */
 
 export const SAMPLE_RATE = 48000;
@@ -37,20 +37,17 @@ export function resampleChannels(channels, speed) {
 /** Pitch-preserving time stretch (WSOLA), tuned for speech. */
 export function timeStretchChannels(channels, speed) {
   const inLen = channels[0].length;
-  const N = Math.round(SAMPLE_RATE * 0.03) & ~7; // ~30ms window, multiple of 8
-  const Hs = N / 2;                               // synthesis hop
-  const Ha = Hs * speed;                          // analysis hop
-  const delta = Math.round(SAMPLE_RATE * 0.01);   // ±10ms search tolerance
-  const D = 8;                                     // decimation for similarity search
+  const N = Math.round(SAMPLE_RATE * 0.03) & ~7;
+  const Hs = N / 2;
+  const Ha = Hs * speed;
+  const delta = Math.round(SAMPLE_RATE * 0.01);
+  const D = 8;
 
-  // Decimated mono signal for fast cross-correlation
   const monoLen = Math.floor(inLen / D);
   const mono = new Float32Array(monoLen);
   for (let i = 0; i < monoLen; i++) {
     let s = 0;
-    for (const ch of channels) {
-      for (let k = 0; k < D; k++) s += ch[i * D + k];
-    }
+    for (const ch of channels) for (let k = 0; k < D; k++) s += ch[i * D + k];
     mono[i] = s;
   }
 
@@ -60,7 +57,6 @@ export function timeStretchChannels(channels, speed) {
   const outLen = Math.ceil(inLen / speed) + N;
   const outs = channels.map(() => new Float32Array(outLen));
   const wsum = new Float32Array(outLen);
-
   const Nd = N / D;
   const deltaD = Math.round(delta / D);
   let prevSrc = 0;
@@ -69,7 +65,6 @@ export function timeStretchChannels(channels, speed) {
     const ideal = Math.round(k * Ha);
     if (ideal + N + delta >= inLen) break;
     const outPos = k * Hs;
-
     let src = ideal;
     if (k > 0) {
       const targetD = Math.floor((prevSrc + Hs) / D);
@@ -85,7 +80,6 @@ export function timeStretchChannels(channels, speed) {
       }
       src = Math.max(0, Math.min(inLen - N, ideal + bestOff * D));
     }
-
     for (let c = 0; c < channels.length; c++) {
       const input = channels[c];
       const out = outs[c];
@@ -111,4 +105,26 @@ export function processAudio(channels, { speed, volume, preservePitch }) {
     for (const ch of out) for (let i = 0; i < ch.length; i++) ch[i] *= volume;
   }
   return out;
+}
+
+export function mixAudioChannels(mainChannels, musicChannels, options = {}) {
+  const { musicVolume = 0.35, loopMusic = true } = options;
+  if (!musicChannels || musicChannels.length === 0) return mainChannels;
+
+  const numChannels = mainChannels.length;
+  const totalSamples = mainChannels[0].length;
+  const musicSamples = musicChannels[0].length;
+  const mixed = mainChannels.map(ch => new Float32Array(ch));
+
+  for (let c = 0; c < numChannels; c++) {
+    const srcCh = musicChannels[c % musicChannels.length];
+    const outCh = mixed[c];
+    for (let i = 0; i < totalSamples; i++) {
+      if (!loopMusic && i >= musicSamples) break;
+      const mIdx = i % musicSamples;
+      const val = outCh[i] + srcCh[mIdx] * musicVolume;
+      outCh[i] = Math.max(-1.0, Math.min(1.0, val));
+    }
+  }
+  return mixed;
 }

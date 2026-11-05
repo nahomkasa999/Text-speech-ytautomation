@@ -4,6 +4,7 @@
 
 import { exportVideoFast, isFastExportSupported, ExportCancelledError } from '../../../video/exporter.js';
 import { runRealtimeExport } from './realtimeRecorder.js';
+import { ExportOptionsModal } from './exportOptionsModal.js';
 import { showToast } from '../../ui/toast.js';
 
 export class ExportManager {
@@ -13,6 +14,9 @@ export class ExportManager {
     this.scene = scene;
     this.callbacks = callbacks;
     this.exportAbort = null;
+    this.optionsModal = new ExportOptionsModal({
+      onConfirm: (opts) => this.executeExport(opts)
+    });
 
     this.attachEvents();
   }
@@ -44,17 +48,19 @@ export class ExportManager {
     );
   }
 
-  async runFastExport(audioUrl) {
+  async runFastExport(audioUrl, exportOpts) {
     this.exportAbort = new AbortController();
     this.el.exportBtnLabel.textContent = 'Preparing… (click to cancel)';
     await Promise.all([document.fonts?.ready, this.preloadSceneImages()]);
 
     const startedAt = performance.now();
     const { blob, ext, codecs } = await exportVideoFast({
-      width: this.scene.canvas.width || this.el.videoCanvas.width,
-      height: this.scene.canvas.height || this.el.videoCanvas.height,
+      width: exportOpts.width || 1920,
+      height: exportOpts.height || 1080,
       renderFrame: (ctx, t) => this.callbacks.renderVideoFrame(t, ctx),
       audioUrl,
+      musicUrl: exportOpts.includeBgm ? this.state.video.bgm?.url : null,
+      musicVolume: this.state.video.bgm?.volume ?? 0.35,
       speed: this.state.video.audioSpeed,
       volume: this.state.video.audioVolume,
       preservePitch: this.state.video.preservePitch,
@@ -86,26 +92,17 @@ export class ExportManager {
     this.callbacks.renderVideoFrame(this.el.videoAudioPlayer.currentTime || 0);
   }
 
-  async startExport() {
-    if (this.state.video.isExporting) {
-      this.exportAbort?.abort();
-      return;
-    }
+  async executeExport(exportOpts = {}) {
     const audioUrl = this.state.activeSession?.audio_url || this.el.videoAudioPlayer.src;
-    if (!this.el.videoAudioPlayer.src || !audioUrl) {
-      showToast('Please load an audio project first.', 'error');
-      return;
-    }
-
     this.state.video.isExporting = true;
     this.el.figmaSelectionBox.classList.add('hidden');
     this.el.videoAudioPlayer.pause();
     this.el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
 
     try {
-      if (isFastExportSupported()) {
+      if (exportOpts.format !== 'webm' && isFastExportSupported()) {
         try {
-          await this.runFastExport(audioUrl);
+          await this.runFastExport(audioUrl, exportOpts);
           return;
         } catch (err) {
           if (err instanceof ExportCancelledError) {
@@ -113,7 +110,6 @@ export class ExportManager {
             return;
           }
           console.warn('[Export] Fast export failed, falling back to real-time recording:', err);
-          showToast(`Fast export unavailable (${err.message}). Recording in real time…`, 'info');
         }
       }
       this.el.btnExportMp4.disabled = true;
@@ -138,6 +134,12 @@ export class ExportManager {
   }
 
   attachEvents() {
-    this.el.btnExportMp4.addEventListener('click', () => this.startExport());
+    this.el.btnExportMp4.addEventListener('click', () => {
+      if (this.state.video.isExporting) {
+        this.exportAbort?.abort();
+      } else {
+        this.optionsModal.show();
+      }
+    });
   }
 }

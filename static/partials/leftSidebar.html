@@ -1,0 +1,48 @@
+<!-- LEFT SIDEBAR: History & Projects -->
+<aside id="left-sidebar" class="sidebar left-sidebar">
+  <div class="sidebar-header">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>
+      </div>
+      <span class="brand-name">Book Studio</span>
+    </div>
+    <button id="btn-new-project" class="btn btn-primary btn-sm btn-icon-only" title="New Project">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+
+  <!-- Studio Mode Switcher -->
+  <div class="mode-switcher-container">
+    <button id="tab-mode-narration" class="mode-tab active">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      <span>Narrator</span>
+    </button>
+    <button id="tab-mode-video" class="mode-tab">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><polygon points="10 9 15 12 10 15 10 9"/></svg>
+      <span>Video Studio</span>
+    </button>
+  </div>
+
+  <div class="sidebar-subbar">
+    <span class="subbar-label">History & Chapters</span>
+    <span id="session-count-badge" class="badge">0</span>
+  </div>
+
+  <!-- History List -->
+  <div id="history-list" class="history-list">
+    <div class="history-empty">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+      <p>No past narrations yet.</p>
+      <small>Generate an audiobook to save it here.</small>
+    </div>
+  </div>
+
+  <!-- System status indicator -->
+  <div class="sidebar-footer">
+    <div class="system-status">
+      <span id="engine-status-dot" class="status-dot"></span>
+      <span id="engine-status-text" class="status-text">Kokoro-82M Ready</span>
+    </div>
+  </div>
+</aside>

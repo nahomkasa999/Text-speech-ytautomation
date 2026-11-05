@@ -13,10 +13,12 @@ from src.routes.images import router as images_router
 from src.routes.sessions import router as sessions_router
 from src.routes.status import router as status_router
 from src.routes.narration import router as narration_router
+from src.routes.views import router as views_router
 
 app = FastAPI(title="AI Book Narrator Studio")
 
-# Register modular API routers
+# Register modular API and View routers
+app.include_router(views_router)
 app.include_router(draft_router)
 app.include_router(images_router)
 app.include_router(sessions_router)

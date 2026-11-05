@@ -3,7 +3,7 @@
  */
 
 import { Muxer, ArrayBufferTarget } from '../../vendor/mp4-muxer.js';
-import { SAMPLE_RATE, decodeAudio, processAudio } from './audioProcessing.js';
+import { SAMPLE_RATE, decodeAudio, processAudio, mixAudioChannels } from './audioProcessing.js';
 import { isFastExportSupported, yieldToEventLoop, waitForQueue, pickVideoConfig, pickAudioConfig } from './codecs.js';
 
 export { isFastExportSupported };
@@ -67,7 +67,7 @@ async function renderAndEncodeFrames(opts, videoEncoder, checkAbort) {
 
 export async function exportVideoFast(opts) {
   const {
-    renderFrame, audioUrl,
+    renderFrame, audioUrl, musicUrl, musicVolume = 0.35,
     speed = 1, volume = 1, preservePitch = true,
     fps = 30, videoBitrate = 6_000_000,
     onProgress = () => {}, signal,
@@ -77,9 +77,27 @@ export async function exportVideoFast(opts) {
   const checkAbort = () => { if (signal?.aborted) throw new ExportCancelledError(); };
 
   onProgress(0, 'Preparing audio');
-  const decoded = await decodeAudio(audioUrl);
-  checkAbort();
-  const audio = processAudio(decoded, { speed, volume, preservePitch });
+  let audio;
+  if (audioUrl) {
+    const decoded = await decodeAudio(audioUrl);
+    checkAbort();
+    audio = processAudio(decoded, { speed, volume, preservePitch });
+  } else {
+    const dur = opts.duration || 10;
+    const samples = Math.round(dur * SAMPLE_RATE);
+    audio = [new Float32Array(samples), new Float32Array(samples)];
+  }
+
+  if (musicUrl) {
+    try {
+      const musicDecoded = await decodeAudio(musicUrl);
+      checkAbort();
+      audio = mixAudioChannels(audio, musicDecoded, { musicVolume });
+    } catch (e) {
+      console.warn('[Export] Could not mix music audio:', e);
+    }
+  }
+
   const videoDuration = audio[0].length / SAMPLE_RATE;
   checkAbort();
 

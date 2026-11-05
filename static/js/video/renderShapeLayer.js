@@ -1,5 +1,5 @@
 /**
- * Renderers for Shape, Image, and Frame Layers.
+ * Renderers for Shape, Image, Video, and Frame Layers.
  */
 
 import { drawRoundedRectPath } from './canvasUtils.js';
@@ -59,6 +59,32 @@ export function drawImageLayer(ctx, layer) {
     ctx.clip();
     ctx.drawImage(layer._loadedImage, layer.x, layer.y, layer.width, layer.height);
     ctx.restore();
+  }
+}
+
+export function drawVideoLayer(ctx, layer, currentTime) {
+  if (!layer._videoEl && layer.src) {
+    const v = document.createElement('video');
+    v.crossOrigin = 'anonymous';
+    v.muted = true;
+    v.playsInline = true;
+    v.src = layer.src;
+    layer._videoEl = v;
+  }
+  if (layer._videoEl) {
+    const v = layer._videoEl;
+    const start = layer.startTime || 0;
+    const relTime = Math.max(0, currentTime - start);
+    if (Math.abs(v.currentTime - relTime) > 0.15 && !v.seeking) {
+      v.currentTime = relTime;
+    }
+    if (v.readyState >= 2) {
+      ctx.save();
+      drawRoundedRectPath(ctx, layer.x, layer.y, layer.width, layer.height, layer.cornerRadius);
+      ctx.clip();
+      ctx.drawImage(v, layer.x, layer.y, layer.width, layer.height);
+      ctx.restore();
+    }
   }
 }
 

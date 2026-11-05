@@ -1,0 +1,111 @@
+<!-- TAB 1 SETTINGS: Voice & Narration (Active in Narrator Mode) -->
+<div id="panel-voice-settings" class="settings-subview">
+  <div class="sidebar-header">
+    <span class="sidebar-heading">Voice & Narration Settings</span>
+  </div>
+
+  <div class="settings-scroll-area">
+    <!-- Engine Selector Tabs -->
+    <div class="setting-group">
+      <label class="setting-label">Synthesis Engine</label>
+      <div class="engine-tabs">
+        <button class="engine-tab active" data-engine="local">
+          <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+          <span class="tab-title">Local (Kokoro)</span>
+        </button>
+        <button class="engine-tab" data-engine="deployed">
+          <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span>
+          <span class="tab-title">Deployed (RunPod)</span>
+        </button>
+        <button class="engine-tab" data-engine="cloud_api">
+          <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-6 6 2-2m-3-1 1.5-1.5M19 10l1.5-1.5M9 21a6 6 0 1 1 0-12 5.97 5.97 0 0 1 4.5 2.05L22 2l-2 2"/></svg></span>
+          <span class="tab-title">Cloud API</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Voice Picker -->
+    <div class="setting-group">
+      <div class="label-with-action">
+        <label class="setting-label" for="voice-select">Narrator Voice</label>
+        <button id="btn-preview-voice" class="btn-text-action">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>Play Sample</span>
+        </button>
+      </div>
+      <select id="voice-select" class="form-select"></select>
+      <p id="voice-desc" class="setting-hint">Warm, expressive narrative tone</p>
+    </div>
+
+    <!-- Audio Speed -->
+    <div class="setting-group">
+      <div class="slider-header">
+        <label class="setting-label" for="speed-slider">Narration Speed</label>
+        <span id="speed-val" class="slider-val">1.0x</span>
+      </div>
+      <input type="range" id="speed-slider" min="0.6" max="1.8" step="0.05" value="1.0" class="form-range" />
+      <div class="slider-ticks">
+        <span>0.75x</span>
+        <span>1.0x</span>
+        <span>1.25x</span>
+        <span>1.5x</span>
+      </div>
+    </div>
+
+    <!-- Smart Punctuation Pauses -->
+    <div class="setting-group">
+      <label class="setting-label">Punctuation Pauses</label>
+      <div class="sub-slider-item">
+        <div class="sub-slider-header">
+          <span>Paragraph Pause</span>
+          <span id="pause-para-val" class="slider-val">0.6s</span>
+        </div>
+        <input type="range" id="pause-para-slider" min="0.2" max="1.5" step="0.1" value="0.6" class="form-range" />
+      </div>
+
+      <div class="sub-slider-item">
+        <div class="sub-slider-header">
+          <span>Sentence Pause</span>
+          <span id="pause-sent-val" class="slider-val">0.25s</span>
+        </div>
+        <input type="range" id="pause-sent-slider" min="0.1" max="0.8" step="0.05" value="0.25" class="form-range" />
+      </div>
+    </div>
+
+    <!-- Deployed (RunPod) Panel -->
+    <div id="panel-deployed-settings" class="engine-subpanel hidden">
+      <div class="divider"></div>
+      <span class="subpanel-title">RunPod / Breeze Configuration</span>
+      <div class="setting-group">
+        <label class="setting-label" for="deployed-endpoint">Endpoint URL</label>
+        <input type="text" id="deployed-endpoint" class="form-input" placeholder="https://xxxx-7860.proxy.runpod.net" />
+      </div>
+      <div class="setting-group">
+        <label class="setting-label" for="deployed-token">Bearer Token (Optional)</label>
+        <input type="password" id="deployed-token" class="form-input" placeholder="Bearer token" />
+      </div>
+      <div class="setting-group">
+        <label class="setting-label" for="deployed-instruction">Voice Design Instruction</label>
+        <textarea id="deployed-instruction" class="form-textarea" rows="2" placeholder="e.g. A warm, thoughtful young woman with a calm delivery."></textarea>
+      </div>
+    </div>
+
+    <!-- Cloud API Panel -->
+    <div id="panel-cloud-settings" class="engine-subpanel hidden">
+      <div class="divider"></div>
+      <span class="subpanel-title">Cloud API Configuration</span>
+      <div class="setting-group">
+        <label class="setting-label" for="cloud-provider">API Provider</label>
+        <select id="cloud-provider" class="form-select">
+          <option value="openai">OpenAI (TTS-1 / TTS-1-HD)</option>
+          <option value="elevenlabs">ElevenLabs</option>
+          <option value="breezeblue">BreezeBlue API</option>
+        </select>
+      </div>
+      <div class="setting-group">
+        <label class="setting-label" for="cloud-api-key">API Key</label>
+        <input type="password" id="cloud-api-key" class="form-input" placeholder="sk-..." />
+      </div>
+    </div>
+  </div>
+</div>

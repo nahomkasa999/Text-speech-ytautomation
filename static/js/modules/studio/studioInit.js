@@ -8,14 +8,15 @@ import { LayersPanel } from './layersPanel.js';
 import { syncInspectorFromLayer } from './inspector/inspectorSync.js';
 import { setupInspectorEvents } from './inspector/inspectorEvents.js';
 import { buildTimelineRuler } from './timeline/timelineRuler.js';
-import { renderSubtitleBlocks, updatePlayheadPosition } from './timeline/timelineTracks.js';
+import { renderSubtitleBlocks, renderMediaClips, updatePlayheadPosition } from './timeline/timelineTracks.js';
 import { setupTimelineScrubber } from './timeline/timelineScrubber.js';
 import { StudioAudioControls } from './playback/audioControls.js';
 import { StudioPlayback } from './playback/studioPlayback.js';
 import { BackgroundManager } from './templates/backgroundTemplates.js';
+import { setupStudioExtensions } from './studioExtensions.js';
 import { renderScene } from '../../video/renderer.js';
 
-function setupStudioTimeline({ el, state, scene, interactionMgr, renderVideoFrame }) {
+function setupStudioTimeline({ el, state, scene, interactionMgr, renderVideoFrame, selectLayer, onPlaybackChange }) {
   const updatePlayhead = (cur, dur) => {
     updatePlayheadPosition({
       cur, dur,
@@ -31,6 +32,8 @@ function setupStudioTimeline({ el, state, scene, interactionMgr, renderVideoFram
     const dur = el.videoAudioPlayer.duration || 10;
     buildTimelineRuler(el.timelineRuler, dur);
     renderSubtitleBlocks(el.laneSubtitles, state.video.syncedSegments, dur);
+    const laneMedia = document.getElementById('lane-media');
+    if (laneMedia) renderMediaClips(laneMedia, scene.layers, dur, selectLayer);
   };
 
   const playback = new StudioPlayback({
@@ -39,7 +42,8 @@ function setupStudioTimeline({ el, state, scene, interactionMgr, renderVideoFram
       renderVideoFrame,
       updatePlayheadPosition: updatePlayhead,
       buildTimelineRulerAndTracks: buildTimeline,
-      updateSelectionBox: () => interactionMgr.updateSelectionBox()
+      updateSelectionBox: () => interactionMgr.updateSelectionBox(),
+      onPlaybackStateChange: onPlaybackChange
     }
   });
 
@@ -132,8 +136,22 @@ export function createStudioSubsystem({ el, state, scene, history, canvasCtx, ge
     onSettingChanged: () => getDraftService()?.debouncedSaveDraft()
   });
 
+  let extensions = null;
   const { updatePlayhead, buildTimeline, playback } = setupStudioTimeline({
-    el, state, scene, interactionMgr, renderVideoFrame
+    el, state, scene, interactionMgr, renderVideoFrame, selectLayer,
+    onPlaybackChange: (isPlaying, cur) => extensions?.bgmManager.syncPlayback(isPlaying, cur)
+  });
+
+  extensions = setupStudioExtensions({
+    el, state, scene, history, canvasCtx, interactionMgr,
+    callbacks: {
+      deleteLayer: (l) => layersPanel.deleteLayer(l),
+      renderLayersList: () => layersPanel.render(),
+      buildTimeline,
+      renderVideoFrame,
+      loadBgTemplate: (url, save) => bgManager.loadTemplate(url, save),
+      saveDraft: () => getDraftService()?.saveDraft()
+    }
   });
 
   setupInspectorEvents({
@@ -153,6 +171,6 @@ export function createStudioSubsystem({ el, state, scene, history, canvasCtx, ge
   return {
     renderVideoFrame, selectLayer, layersPanel, bgManager,
     audioControls, updatePlayhead, buildTimeline, playback,
-    panelMgr, interactionMgr, initVideoStudio
+    panelMgr, interactionMgr, initVideoStudio, extensions
   };
 }

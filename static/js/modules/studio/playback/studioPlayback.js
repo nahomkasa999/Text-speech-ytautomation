@@ -24,6 +24,7 @@ export class StudioPlayback {
       this.el.videoAudioPlayer.pause();
       this.state.video.isPlaying = false;
       this.el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+      this.callbacks.onPlaybackStateChange?.(false, this.el.videoAudioPlayer.currentTime);
     } else {
       this.el.videoAudioPlayer.playbackRate = this.state.video.audioSpeed;
       this.el.videoAudioPlayer.volume = this.state.video.audioVolume;
@@ -33,6 +34,7 @@ export class StudioPlayback {
         playPromise.then(() => {
           this.state.video.isPlaying = true;
           this.el.videoPlaySvg.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+          this.callbacks.onPlaybackStateChange?.(true, this.el.videoAudioPlayer.currentTime);
           requestAnimationFrame(() => this.loop());
         }).catch(err => {
           console.error('Audio playback error:', err);
@@ -47,6 +49,7 @@ export class StudioPlayback {
     this.el.videoAudioPlayer.currentTime = 0;
     this.state.video.isPlaying = false;
     this.el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+    this.callbacks.onPlaybackStateChange?.(false, 0);
     this.callbacks.updatePlayheadPosition(0, this.el.videoAudioPlayer.duration || 1);
     this.callbacks.renderVideoFrame(0);
   }
@@ -67,6 +70,7 @@ export class StudioPlayback {
     if (cur >= dur) {
       this.state.video.isPlaying = false;
       this.el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+      this.callbacks.onPlaybackStateChange?.(false, 0);
       return;
     }
     requestAnimationFrame(() => this.loop());
@@ -79,17 +83,20 @@ export class StudioPlayback {
     this.el.videoAudioPlayer.addEventListener('play', () => {
       this.state.video.isPlaying = true;
       this.el.videoPlaySvg.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+      this.callbacks.onPlaybackStateChange?.(true, this.el.videoAudioPlayer.currentTime);
       requestAnimationFrame(() => this.loop());
     });
 
     this.el.videoAudioPlayer.addEventListener('pause', () => {
       this.state.video.isPlaying = false;
       this.el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+      this.callbacks.onPlaybackStateChange?.(false, this.el.videoAudioPlayer.currentTime);
     });
 
     this.el.videoAudioPlayer.addEventListener('ended', () => {
       this.state.video.isPlaying = false;
       this.el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+      this.callbacks.onPlaybackStateChange?.(false, 0);
       this.callbacks.updatePlayheadPosition(0, this.el.videoAudioPlayer.duration || 1);
       this.callbacks.renderVideoFrame(0);
     });
