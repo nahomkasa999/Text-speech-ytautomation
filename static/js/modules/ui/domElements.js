@@ -6,6 +6,7 @@ function getNarratorElements() {
   return {
     tabModeNarration: document.getElementById('tab-mode-narration'),
     tabModeVideo: document.getElementById('tab-mode-video'),
+    btnQuickSwitchVideo: document.getElementById('btn-quick-switch-video'),
     narrationView: document.getElementById('narration-view'),
     videoStudioView: document.getElementById('video-studio-view'),
     panelVoiceSettings: document.getElementById('panel-voice-settings'),

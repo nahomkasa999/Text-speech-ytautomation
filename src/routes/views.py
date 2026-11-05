@@ -17,6 +17,7 @@ def read_partial(name: str) -> str:
     return ""
 
 @router.get("/", response_class=HTMLResponse)
+@router.get("/index.html", response_class=HTMLResponse)
 def index_view():
     left_sidebar = read_partial("leftSidebar.html")
     narrator_view = read_partial("narratorView.html")

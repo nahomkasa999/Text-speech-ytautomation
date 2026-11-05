@@ -44,5 +44,6 @@ export class ModeSwitcher {
     this.el.tabModeNarration.addEventListener('click', () => this.setMode('narration'));
     this.el.tabModeVideo.addEventListener('click', () => this.setMode('video'));
     this.el.btnOpenInVideoStudio.addEventListener('click', () => this.setMode('video'));
+    this.el.btnQuickSwitchVideo?.addEventListener('click', () => this.setMode('video'));
   }
 }
