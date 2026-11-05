@@ -8,6 +8,7 @@ import { HistoryManager, PropertyChangeCommand, AddLayerCommand, RemoveLayerComm
 import { renderScene, measureTextLayout } from './video/renderer.js';
 import { CanvasInteractionManager } from './video/interaction.js';
 import { PanelManager } from './video/panels.js';
+import { exportVideoFast, isFastExportSupported, ExportCancelledError } from './video/exporter.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   let currentMode = 'narration';
@@ -283,6 +284,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // DRAFT AUTO-SAVE BUFFER (NEVER LOSE WORK ON CLOSE/REFRESH)
   // =========================================================
   let saveDraftTimer = null;
+  const getPersistableBgUrl = () => {
+    const cur = state.video.bgImageUrl;
+    if (cur && !cur.startsWith('data:')) return cur;
+    // Mid-upload (local data: preview) — keep the last persisted background instead
+    return localStorage.getItem('book_narrator_bg_image') || lastPersistedBgUrl || null;
+  };
+  let lastPersistedBgUrl = null;
   const saveDraft = async () => {
     if (el.autosaveStatus) el.autosaveStatus.textContent = 'Saving...';
     const draft = {
@@ -296,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
       videoLayers: scene.toJSON().layers,
       audioSpeed: state.video.audioSpeed,
       audioVolume: state.video.audioVolume,
-      bg_image: state.video.bgImageUrl || localStorage.getItem('book_narrator_bg_image') || null,
+      bg_image: getPersistableBgUrl(),
       updated_at: Date.now()
     };
 
@@ -403,6 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setAudioVolume(draft.audioVolume, false);
       }
       const bgImg = draft.bg_image || localStorage.getItem('book_narrator_bg_image');
+      if (bgImg && !bgImg.startsWith('data:')) lastPersistedBgUrl = bgImg;
       if (bgImg) {
         loadBackgroundTemplate(bgImg, false);
       }
@@ -514,16 +523,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // =========================================================
   // CORE SCENE RENDERING & INTERACTION MANAGERS
   // =========================================================
-  const renderVideoFrame = (currentTime) => {
+  const renderVideoFrame = (currentTime, ctx = canvasCtx) => {
     const cur = currentTime !== undefined ? currentTime : (el.videoAudioPlayer.currentTime || 0);
     // If no synced segments, provide draft bookText into captions layer
     const capLayer = scene.getLayer('layer_captions');
     if (capLayer && (!scene.syncedSegments || scene.syncedSegments.length === 0)) {
       capLayer.text = el.bookText.value.trim() ? el.bookText.value.trim().slice(0, 140) : '';
     }
-    renderScene(canvasCtx, scene, {
+    renderScene(ctx, scene, {
       currentTime: cur,
-      bgImage: state.video.bgImage
+      bgImage: state.video.bgImage,
+      isExport: ctx !== canvasCtx
     });
   };
 
@@ -996,11 +1006,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const initVideoStudio = () => {
     if (!state.video.bgImage) {
       const savedBg = state.video.bgImageUrl || localStorage.getItem('book_narrator_bg_image');
-      if (savedBg) {
-        loadBackgroundTemplate(savedBg, false);
-      } else {
+      if (!savedBg) {
         loadBackgroundTemplate('/templates/sample-book.jpg', false);
+      } else if (savedBg !== state.video.bgImageUrl) {
+        loadBackgroundTemplate(savedBg, false);
       }
+      // else: the saved background is already loading; don't start a competing load
     } else {
       renderVideoFrame();
     }
@@ -1008,10 +1019,35 @@ document.addEventListener('DOMContentLoaded', () => {
     selectLayer('layer_captions');
   };
 
+  // Remember which background belongs to the active session (stored in sessions.json)
+  const saveBgForActiveSession = async (url) => {
+    const sess = state.activeSession;
+    if (!sess || !url || url.startsWith('data:') || sess.bg_image === url) return;
+    sess.bg_image = url;
+    const listed = state.sessions.find(s => s.id === sess.id);
+    if (listed) listed.bg_image = url;
+    try {
+      await fetch('/api/sessions/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sess.id, bg_image: url })
+      });
+    } catch (e) {
+      console.warn('Could not save background for session:', e);
+    }
+  };
+
+  let bgLoadToken = 0;
   const loadBackgroundTemplate = (url, shouldSave = true) => {
     if (!url) return;
+    // Record the requested background right away so startup code doesn't treat the
+    // project as "no background" while a large image is still downloading.
+    const token = ++bgLoadToken;
+    state.video.bgImageUrl = url;
     const img = new Image();
     img.onload = () => {
+      // A newer background was requested while this one was loading; ignore the stale one
+      if (token !== bgLoadToken) return;
       state.video.bgImage = img;
       state.video.bgImageUrl = url;
       state.video.bgImageLoaded = true;
@@ -1020,6 +1056,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           localStorage.setItem('book_narrator_bg_image', url);
         } catch (e) {}
+        saveBgForActiveSession(url);
         debouncedSaveDraft();
       }
     };
@@ -1051,10 +1088,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.ok) {
           const data = await res.json();
           if (data.url) {
-            state.video.bgImageUrl = data.url;
+            loadBackgroundTemplate(data.url, false);
             try {
               localStorage.setItem('book_narrator_bg_image', data.url);
             } catch (err) {}
+            saveBgForActiveSession(data.url);
             saveDraft();
             showToast('Cover image saved & persisted', 'success');
           }
@@ -1337,99 +1375,168 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // MP4 Video Exporter
-  el.btnExportMp4.addEventListener('click', async () => {
-    if (!el.videoAudioPlayer.src) {
-      showToast('Please load an audio project first.', 'error');
-      return;
-    }
+  let exportAbort = null;
 
-    state.video.isExporting = true;
-    el.btnExportMp4.disabled = true;
-    el.exportBtnLabel.textContent = 'Recording MP4...';
+  const getExportFilename = () =>
+    (state.activeSession?.title || 'youtube_book_automation').replace(/[^a-z0-9_-]/gi, '_');
 
-    // Hide Figma selection handles during export
-    el.figmaSelectionBox.classList.add('hidden');
-    el.videoAudioPlayer.pause();
-    el.videoAudioPlayer.currentTime = 0;
+  const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
 
-    try {
-      const stream = el.videoCanvas.captureStream(30);
-      
-      // Use an isolated audio instance for recording so the master player is NEVER hijacked or muted
-      const exportAudio = new Audio(state.activeSession.audio_url);
-      exportAudio.crossOrigin = 'anonymous';
-      exportAudio.playbackRate = state.video.audioSpeed;
+  const finishExportUI = () => {
+    el.figmaSelectionBox.classList.remove('hidden');
+    el.btnExportMp4.disabled = false;
+    el.exportBtnLabel.textContent = 'Export MP4';
+    state.video.isExporting = false;
+    state.video.isPlaying = false;
+    exportAbort = null;
+    renderVideoFrame(el.videoAudioPlayer.currentTime || 0);
+  };
 
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioCtx.createMediaElementSource(exportAudio);
-      const gainNode = audioCtx.createGain();
-      gainNode.gain.value = state.video.audioVolume;
-      const dest = audioCtx.createMediaStreamDestination();
-      source.connect(gainNode);
-      gainNode.connect(dest);
-      gainNode.connect(audioCtx.destination);
+  // Make sure every image layer is decoded before frames are rendered offline
+  const preloadSceneImages = () => Promise.all(
+    scene.layers
+      .filter(l => l.type === 'image' && l.src && !l._loadedImage)
+      .map(l => new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => { l._loadedImage = img; resolve(); };
+        img.onerror = () => resolve();
+        img.src = l.src;
+      }))
+  );
 
-      const combinedStream = new MediaStream([
-        ...stream.getVideoTracks(),
-        ...dest.stream.getAudioTracks()
-      ]);
+  // Fast path: offline frame-by-frame render + WebCodecs encode (much faster than real time)
+  const runFastExport = async (audioUrl) => {
+    exportAbort = new AbortController();
+    el.exportBtnLabel.textContent = 'Preparing… (click to cancel)';
 
-      const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')
-        ? 'video/mp4;codecs=avc1'
-        : (MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm');
+    await Promise.all([document.fonts?.ready, preloadSceneImages()]);
 
-      const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 6000000 });
-      const chunks = [];
+    const startedAt = performance.now();
+    const { blob, ext, codecs } = await exportVideoFast({
+      width: scene.canvas.width || el.videoCanvas.width,
+      height: scene.canvas.height || el.videoCanvas.height,
+      renderFrame: (ctx, t) => renderVideoFrame(t, ctx),
+      audioUrl,
+      speed: state.video.audioSpeed,
+      volume: state.video.audioVolume,
+      preservePitch: state.video.preservePitch,
+      fps: 30,
+      videoBitrate: 6_000_000,
+      signal: exportAbort.signal,
+      onProgress: (p, stage, audioTime) => {
+        el.exportBtnLabel.textContent = `${stage} ${Math.round(p * 100)}% (click to cancel)`;
+        if (audioTime !== undefined) updatePlayheadPosition(audioTime, el.videoAudioPlayer.duration || 1);
+      },
+    });
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
+    const filename = `${getExportFilename()}.${ext}`;
+    downloadBlob(blob, filename);
+    const secs = ((performance.now() - startedAt) / 1000).toFixed(1);
+    console.info(`[Export] ${filename} (${codecs}, ${(blob.size / 1e6).toFixed(1)} MB) in ${secs}s`);
+    showToast(`Video exported as ${filename} in ${secs}s!`, 'success');
+  };
 
-      recorder.onstop = () => {
-        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-        const blob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const filename = (state.activeSession?.title || 'youtube_book_automation').replace(/[^a-z0-9_-]/gi, '_');
-        a.download = `${filename}.${ext}`;
-        a.click();
+  // Fallback: real-time MediaRecorder capture (browsers without WebCodecs)
+  const runRealtimeExport = (audioUrl) => new Promise((resolve, reject) => {
+    el.exportBtnLabel.textContent = 'Recording (real time)…';
+    const stream = el.videoCanvas.captureStream(30);
+    const exportAudio = new Audio(audioUrl);
+    exportAudio.crossOrigin = 'anonymous';
+    exportAudio.playbackRate = state.video.audioSpeed;
+    exportAudio.preservesPitch = state.video.preservePitch;
 
-        el.figmaSelectionBox.classList.remove('hidden');
-        el.btnExportMp4.disabled = false;
-        el.exportBtnLabel.textContent = 'Export MP4';
-        state.video.isExporting = false;
-        exportAudio.pause();
-        audioCtx.close().catch(() => {});
-        showToast(`Video successfully exported as ${filename}.${ext}!`, 'success');
-      };
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaElementSource(exportAudio);
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.value = state.video.audioVolume;
+    const dest = audioCtx.createMediaStreamDestination();
+    source.connect(gainNode);
+    gainNode.connect(dest);
+    gainNode.connect(audioCtx.destination);
 
-      recorder.start();
-      await exportAudio.play();
+    const combinedStream = new MediaStream([
+      ...stream.getVideoTracks(),
+      ...dest.stream.getAudioTracks()
+    ]);
+
+    const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')
+      ? 'video/mp4;codecs=avc1'
+      : (MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm');
+
+    const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 6000000 });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      exportAudio.pause();
+      audioCtx.close().catch(() => {});
+      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const filename = `${getExportFilename()}.${ext}`;
+      downloadBlob(new Blob(chunks, { type: mimeType }), filename);
+      showToast(`Video exported as ${filename}!`, 'success');
+      resolve();
+    };
+
+    recorder.start();
+    exportAudio.play().then(() => {
       state.video.isPlaying = true;
-
-      // Sync canvas animation with export audio
       const exportSyncLoop = () => {
         if (!state.video.isExporting) return;
         const cur = exportAudio.currentTime;
         const dur = exportAudio.duration || 1;
         renderVideoFrame(cur);
         updatePlayheadPosition(cur, dur);
-        if (cur < dur) {
-          requestAnimationFrame(exportSyncLoop);
-        }
+        if (cur < dur) requestAnimationFrame(exportSyncLoop);
       };
       requestAnimationFrame(exportSyncLoop);
+    }).catch(reject);
+    exportAudio.onended = () => recorder.stop();
+  });
 
-      exportAudio.onended = () => {
-        recorder.stop();
-      };
+  el.btnExportMp4.addEventListener('click', async () => {
+    // Clicking again during a fast export cancels it
+    if (state.video.isExporting) {
+      exportAbort?.abort();
+      return;
+    }
+    const audioUrl = state.activeSession?.audio_url || el.videoAudioPlayer.src;
+    if (!el.videoAudioPlayer.src || !audioUrl) {
+      showToast('Please load an audio project first.', 'error');
+      return;
+    }
+
+    state.video.isExporting = true;
+    el.figmaSelectionBox.classList.add('hidden');
+    el.videoAudioPlayer.pause();
+    el.videoPlaySvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+
+    try {
+      if (isFastExportSupported()) {
+        try {
+          await runFastExport(audioUrl);
+          return;
+        } catch (err) {
+          if (err instanceof ExportCancelledError) {
+            showToast('Export cancelled.', 'info');
+            return;
+          }
+          console.warn('[Export] Fast export failed, falling back to real-time recording:', err);
+          showToast(`Fast export unavailable (${err.message}). Recording in real time…`, 'info');
+        }
+      }
+      el.btnExportMp4.disabled = true; // real-time recording can't be cancelled mid-way
+      await runRealtimeExport(audioUrl);
     } catch (err) {
       showToast(`Export error: ${err.message}`, 'error');
-      el.figmaSelectionBox.classList.remove('hidden');
-      el.btnExportMp4.disabled = false;
-      el.exportBtnLabel.textContent = 'Export MP4';
-      state.video.isExporting = false;
+    } finally {
+      finishExportUI();
     }
   });
 
@@ -1456,6 +1563,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Sync into Video Studio
     el.videoProjectName.textContent = sess.title;
+
+    // Each session keeps its own background; sessions without one keep the current background
+    if (sess.bg_image && sess.bg_image !== state.video.bgImageUrl) {
+      loadBackgroundTemplate(sess.bg_image, false);
+    }
 
     // Reset Video Studio layers to clean slate for THIS chapter
     const capLayer = new TranscriptionLayer({
@@ -1796,6 +1908,7 @@ document.addEventListener('DOMContentLoaded', () => {
             el.progressCard.classList.add('hidden');
             await loadSessions();
             selectSession(data.session);
+            saveBgForActiveSession(getPersistableBgUrl());
             el.mainAudioPlayer.play().catch(() => {});
           } else if (data.status === 'error') {
             throw new Error(data.error);

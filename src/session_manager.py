@@ -94,6 +94,16 @@ class SessionManager:
         self._write_db(sessions)
         return session_data
 
+    def update_session(self, session_id: str, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update editable per-session fields (e.g. the Video Studio background image)."""
+        sessions = self._read_db()
+        for s in sessions:
+            if s["id"] == session_id:
+                s.update(fields)
+                self._write_db(sessions)
+                return s
+        return None
+
     def delete_session(self, session_id: str) -> bool:
         sessions = self._read_db()
         target = None

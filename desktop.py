@@ -4,6 +4,7 @@ Opens a native desktop application window using pywebview,
 with an automatic fallback to the default browser.
 """
 
+import os
 import sys
 import time
 import socket
@@ -46,7 +47,11 @@ def main():
             height=860,
             min_size=(900, 600)
         )
-        webview.start()
+        # Persist localStorage/cookies between launches (pywebview defaults to private
+        # mode, which wipes storage on every restart and loses UI state like backgrounds)
+        storage_dir = os.path.join(os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)), "outputs", "webview_storage")
+        os.makedirs(storage_dir, exist_ok=True)
+        webview.start(private_mode=False, storage_path=storage_dir)
     except Exception as e:
         # Fallback to browser if display/webview library is not present
         print(f"[Desktop Launcher] Native window unavailable ({e}). Opening in default browser...")

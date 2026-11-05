@@ -188,6 +188,23 @@ def delete_session(req: DeleteSessionRequest):
     success = session_mgr.delete_session(req.session_id)
     return {"success": success}
 
+class UpdateSessionRequest(BaseModel):
+    session_id: str
+    bg_image: Optional[str] = None
+
+@app.post("/api/sessions/update")
+def update_session(req: UpdateSessionRequest):
+    fields = {}
+    if req.bg_image is not None:
+        # Only store server image URLs / bundled templates, never raw data: URLs
+        if req.bg_image.startswith("data:"):
+            raise HTTPException(status_code=400, detail="Upload the image first and send its URL")
+        fields["bg_image"] = req.bg_image
+    updated = session_mgr.update_session(req.session_id, fields)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"success": True, "session": updated}
+
 @app.get("/audio/{filename}")
 def serve_audio(filename: str):
     path = os.path.join(AUDIO_DIR, filename)

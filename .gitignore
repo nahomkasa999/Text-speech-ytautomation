@@ -25,3 +25,4 @@ outputs/draft.json
 *.swp
 .vscode/
 .idea/
+outputs/webview_storage/

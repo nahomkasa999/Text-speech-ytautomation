@@ -417,10 +417,15 @@ function drawTranscriptionLayer(ctx, layer, scene, currentTime) {
  */
 function drawImageLayer(ctx, layer) {
   if (!layer._loadedImage && layer.src) {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = layer.src;
-    img.onload = () => { layer._loadedImage = img; };
+    // Start loading once; don't spawn a new request on every frame
+    if (layer._loadingSrc !== layer.src) {
+      const src = layer.src;
+      layer._loadingSrc = src;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => { if (layer._loadingSrc === src) layer._loadedImage = img; };
+      img.src = src;
+    }
     return;
   }
 
