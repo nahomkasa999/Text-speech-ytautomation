@@ -1,0 +1,139 @@
+/* CAPCUT-STYLE TIMELINE TRACKS, RULER, PLAYHEAD */
+.timeline-viewport {
+  flex: 1;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--timeline-bg);
+  cursor: pointer;
+}
+
+.timeline-ruler {
+  height: 22px;
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  background: #0b111e;
+}
+
+.ruler-tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-subtle);
+  padding-left: 4px;
+  line-height: 20px;
+}
+
+.timeline-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.timeline-track {
+  display: flex;
+  height: 38px;
+  background: var(--track-bg);
+  border-bottom: 1px solid var(--track-border);
+  position: relative;
+}
+
+.track-header {
+  width: 90px;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border-right: 1px solid var(--track-border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.track-icon { font-size: 12px; }
+.track-lane {
+  flex: 1;
+  position: relative;
+  height: 100%;
+}
+
+.caption-block {
+  position: absolute;
+  top: 4px;
+  height: 30px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.7) 0%, rgba(59, 130, 246, 0.7) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.8);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.caption-block.active {
+  border-color: #fff;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.95) 0%, rgba(59, 130, 246, 0.95) 100%);
+}
+
+.audio-block {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  width: 100%;
+  height: 30px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.3) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.waveform-ribs {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.7) 0px,
+    rgba(16, 185, 129, 0.7) 2px,
+    transparent 2px,
+    transparent 5px
+  );
+  opacity: 0.85;
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: 0;
+  left: 90px;
+  width: 2px;
+  height: 100%;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.playhead-head {
+  width: 10px;
+  height: 10px;
+  background: var(--playhead-color);
+  clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+  transform: translateX(-4px);
+}
+
+.playhead-line {
+  width: 2px;
+  height: 100%;
+  background: var(--playhead-color);
+  box-shadow: 0 0 6px var(--playhead-color);
+}

@@ -1,0 +1,102 @@
+/* TOP BAR & PANEL CONTROLS */
+
+.top-bar-left, .top-bar-center, .top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-bar-center {
+  flex: 1;
+  justify-content: center;
+}
+
+.panel-toggle-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-input);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.panel-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.panel-toggle-btn.active {
+  background: var(--bg-panel-raised);
+  color: var(--accent-blue);
+  border-color: var(--border-subtle);
+}
+
+.top-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+  margin: 0 4px;
+}
+
+.zoom-dropdown-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.zoom-select {
+  height: 26px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 0 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+/* RESIZABLE PANELS & DRAG HANDLES */
+
+.panel-resizer {
+  position: relative;
+  z-index: 40;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.panel-resizer:hover, .panel-resizer.dragging {
+  background: var(--accent-blue);
+}
+
+.resizer-left {
+  width: 4px;
+  cursor: col-resize;
+  margin-right: -4px;
+}
+
+.resizer-right {
+  width: 4px;
+  cursor: col-resize;
+  margin-left: -4px;
+}
+
+.resizer-timeline {
+  height: 4px;
+  width: 100%;
+  cursor: row-resize;
+  margin-bottom: -4px;
+}
+
+.sidebar.collapsed {
+  display: none !important;
+}
+
+.capcut-timeline-container.collapsed {
+  display: none !important;
+}

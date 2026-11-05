@@ -1,0 +1,192 @@
+/* CAPCUT-STYLE BOTTOM TIMELINE TOOLBAR & CONTROLS */
+.capcut-timeline-container {
+  height: 170px;
+  background: var(--timeline-bg);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.timeline-toolbar {
+  height: 38px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-sidebar);
+}
+
+.transport-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.transport-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.transport-btn:hover {
+  background: var(--bg-surface-hover);
+  color: #60a5fa;
+}
+
+.transport-btn.play-btn {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.timeline-timecode {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+.audio-controls-deck {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.widget-template-grid,
+.widget-tmpl-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.widget-tmpl-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 6px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.widget-tmpl-btn:hover {
+  background: var(--bg-hover);
+  color: #fff;
+  border-color: var(--accent-blue);
+}
+
+.widget-tmpl-btn.active {
+  background: rgba(13, 153, 255, 0.15);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.widget-tmpl-btn .tmpl-icon {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.widget-tmpl-btn .tmpl-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.deck-volume-wrap, .deck-speed-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audio-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.audio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  cursor: pointer;
+  border: 1px solid #fff;
+}
+.audio-slider.volume-slider { width: 65px; }
+.audio-slider.speed-slider { width: 85px; }
+
+.audio-val-label, .speed-val-badge {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 32px;
+}
+.speed-val-badge {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-align: center;
+  min-width: 38px;
+}
+
+.speed-control-deck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.speed-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.speed-buttons {
+  display: flex;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.speed-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.speed-btn:hover { color: #fff; }
+.speed-btn.active {
+  background: var(--bg-surface);
+  color: #60a5fa;
+}
