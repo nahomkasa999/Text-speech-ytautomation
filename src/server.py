@@ -14,7 +14,8 @@ from src.routes.sessions import router as sessions_router
 from src.routes.status import router as status_router
 from src.routes.narration import router as narration_router
 from src.routes.views import router as views_router
-from src.routes.voice_design import router as voice_design_router
+# Gemini Voice Design is disabled for this release (planned for the next version).
+# from src.routes.voice_design import router as voice_design_router
 
 app = FastAPI(title="AI Book Narrator Studio")
 
@@ -25,7 +26,7 @@ app.include_router(images_router)
 app.include_router(sessions_router)
 app.include_router(status_router)
 app.include_router(narration_router)
-app.include_router(voice_design_router)
+# app.include_router(voice_design_router)
 
 # Mount static frontend
 os.makedirs(STATIC_DIR, exist_ok=True)
