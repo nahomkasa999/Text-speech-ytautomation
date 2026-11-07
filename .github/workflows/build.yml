@@ -38,6 +38,11 @@ on:
         required: false
         default: 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin'
         type: string
+      publish_release:
+        description: 'Publish the finished files as a GitHub Release (a public download page)?'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -71,7 +76,7 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "APP_VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_ENV"
           else
-            echo "APP_VERSION=0.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+            echo "APP_VERSION=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
           fi
 
       - name: Set up Python
@@ -161,7 +166,7 @@ jobs:
           path: release/*
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -174,6 +179,9 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          # Tag pushes use their own tag; manual runs create v1.0.<run number> on the built commit.
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v1.0.{0}', github.run_number) }}
+          target_commitish: ${{ github.sha }}
           files: release/*
           generate_release_notes: true
           body: |
