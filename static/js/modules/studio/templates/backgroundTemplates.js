@@ -54,12 +54,14 @@ export class BackgroundManager {
   }
 
   attachEvents() {
-    this.el.btnSampleTemplate.addEventListener('click', () => {
+    // The sample-template button may not exist in the current layout; guard so
+    // a missing element doesn't abort the whole app start-up.
+    this.el.btnSampleTemplate?.addEventListener('click', () => {
       this.loadTemplate('/templates/sample-book.jpg', true);
       showToast('Loaded sample book mockup', 'info');
     });
 
-    this.el.bgImageUploader.addEventListener('change', (e) => {
+    this.el.bgImageUploader?.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
       showToast('Applying cover image...', 'info');
