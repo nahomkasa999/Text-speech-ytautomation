@@ -66,8 +66,17 @@ export class TranscriptionLayer extends TextLayer {
     this.endTime = 999999;
     this.name = data.name || 'Synced Captions';
     this.text = data.text || 'let me say that again your emotions are not your friend';
-    this.height = typeof data.height === 'number' ? Math.max(data.height, 400) : 420;
+    // Older projects stored the shrink-to-text height; give those a roomy box once.
+    // Projects saved with a fixed caption box keep the size the user chose.
+    this.captionBoxFixed = true;
+    this.height = typeof data.height !== 'number' ? 420
+      : (data.captionBoxFixed ? Math.max(data.height, 40) : Math.max(data.height, 400));
     this.verticalAlign = data.verticalAlign || 'middle';
+    // Captions use a fixed-size box: the text is paginated to fill it
+    // (see captionPagination.js) instead of the box growing/shrinking.
+    this.resizing = 'fixed';
+    // Keep the box centred where the captions were, now that the height is fixed.
+    this.y = this.anchorCenterY - this.height / 2;
     this.maxLines = typeof data.maxLines === 'number' ? data.maxLines : 4;
     this.wordsPerChunk = typeof data.wordsPerChunk === 'number' ? data.wordsPerChunk : 8;
     this.highlightActiveWord = data.highlightActiveWord !== false;
@@ -81,6 +90,7 @@ export class TranscriptionLayer extends TextLayer {
     return {
       ...super.toJSON(),
       type: 'transcription',
+      captionBoxFixed: true,
       verticalAlign: this.verticalAlign,
       maxLines: this.maxLines,
       wordsPerChunk: this.wordsPerChunk,

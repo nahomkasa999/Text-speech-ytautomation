@@ -3,6 +3,7 @@
  */
 
 import { measureTextLayout } from './textMeasurement.js';
+import { getCaptionPages, findPageAt } from './captionPagination.js';
 
 export function drawTextLayer(ctx, layer) {
   const layout = measureTextLayout(ctx, layer);
@@ -56,32 +57,22 @@ export function drawTextLayer(ctx, layer) {
   ctx.restore();
 }
 
-function resolveCaptionTextAndWordIndex(scene, currentTime, layer) {
-  let text = layer.text || '';
-  let activeWordIdx = -1;
-
-  if (Array.isArray(scene.syncedSegments) && scene.syncedSegments.length > 0) {
-    const activeSeg = scene.syncedSegments.find(s => currentTime >= s.start && currentTime <= s.end);
-    if (activeSeg) {
-      text = activeSeg.text;
-      if (layer.highlightActiveWord && Array.isArray(activeSeg.words)) {
-        activeWordIdx = activeSeg.words.findIndex(w => currentTime >= w.start && currentTime <= w.end);
-      }
-    } else if (currentTime <= scene.syncedSegments[0].start) {
-      text = scene.syncedSegments[0].text;
-    } else {
-      let lastSeg = null;
-      for (let i = scene.syncedSegments.length - 1; i >= 0; i--) {
-        if (currentTime >= scene.syncedSegments[i].start) { lastSeg = scene.syncedSegments[i]; break; }
-      }
-      text = lastSeg ? lastSeg.text : scene.syncedSegments[scene.syncedSegments.length - 1].text;
-    }
-  }
-  return { text, activeWordIdx };
+function resolveCaptionTextAndWordIndex(ctx, scene, currentTime, layer) {
+  // Captions are re-cut into "pages" that fill the caption box at the chosen
+  // font size (see captionPagination.js), so every caption has a similar amount
+  // of text instead of one whole sentence at a time.
+  const hasSegments = Array.isArray(scene.syncedSegments) && scene.syncedSegments.length > 0;
+  const segments = hasSegments
+    ? scene.syncedSegments
+    : (layer._staticCaptionSegments?.[0]?.text === (layer.text || '')
+        ? layer._staticCaptionSegments
+        : (layer._staticCaptionSegments = [{ start: 0, end: 0, text: layer.text || '' }]));
+  const page = findPageAt(getCaptionPages(ctx, layer, segments), currentTime);
+  return { text: page ? page.text : '', activeWordIdx: -1 };
 }
 
 export function drawTranscriptionLayer(ctx, layer, scene, currentTime) {
-  const { text: currentCaptionText, activeWordIdx } = resolveCaptionTextAndWordIndex(scene, currentTime, layer);
+  const { text: currentCaptionText, activeWordIdx } = resolveCaptionTextAndWordIndex(ctx, scene, currentTime, layer);
   const layout = measureTextLayout(ctx, layer, currentCaptionText);
   const { lines, lineHeight, measuredFontSize } = layout;
   if (!lines || lines.length === 0) return;
@@ -105,8 +96,9 @@ export function drawTranscriptionLayer(ctx, layer, scene, currentTime) {
     startY = layer.anchorCenterY - (layer.height || 400) / 2;
   }
 
-  layer.renderedTop = startY;
-  layer.renderedHeight = layout.totalHeight;
+  // Selection / hit area is the whole fixed caption box, not just the text lines.
+  layer.renderedTop = layer.anchorCenterY - (layer.height || 400) / 2;
+  layer.renderedHeight = layer.height || 400;
 
   let globalWordCount = 0;
   lines.forEach((lineText, lIdx) => {
