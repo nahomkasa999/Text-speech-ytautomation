@@ -1,5 +1,9 @@
 /**
  * Timeline Clip Operations: split, trim, delete, and arrange clips.
+ *
+ * NOTE: Split and Trim are disabled for this release (planned for the next
+ * version). Their buttons and keyboard shortcuts are commented out below; the
+ * methods are kept so the feature can be switched back on easily.
  */
 
 import { showToast } from '../../ui/toast.js';
@@ -15,29 +19,31 @@ export class ClipOperations {
   }
 
   attachEvents() {
-    const btnSplit = document.getElementById('btn-timeline-split');
-    const btnTrimLeft = document.getElementById('btn-timeline-trim-left');
-    const btnTrimRight = document.getElementById('btn-timeline-trim-right');
+    // Split / Trim disabled for this release:
+    // const btnSplit = document.getElementById('btn-timeline-split');
+    // const btnTrimLeft = document.getElementById('btn-timeline-trim-left');
+    // const btnTrimRight = document.getElementById('btn-timeline-trim-right');
     const btnDelete = document.getElementById('btn-timeline-delete-clip');
 
-    if (btnSplit) btnSplit.addEventListener('click', () => this.splitAtPlayhead());
-    if (btnTrimLeft) btnTrimLeft.addEventListener('click', () => this.trimStart());
-    if (btnTrimRight) btnTrimRight.addEventListener('click', () => this.trimEnd());
+    // if (btnSplit) btnSplit.addEventListener('click', () => this.splitAtPlayhead());
+    // if (btnTrimLeft) btnTrimLeft.addEventListener('click', () => this.trimStart());
+    // if (btnTrimRight) btnTrimRight.addEventListener('click', () => this.trimEnd());
     if (btnDelete) btnDelete.addEventListener('click', () => this.deleteSelected());
 
-    window.addEventListener('keydown', (e) => {
-      if (e.target.matches('input, textarea')) return;
-      if (e.key === 's' || e.key === 'S') {
-        e.preventDefault();
-        this.splitAtPlayhead();
-      } else if (e.key === '[') {
-        e.preventDefault();
-        this.trimStart();
-      } else if (e.key === ']') {
-        e.preventDefault();
-        this.trimEnd();
-      }
-    });
+    // Split (S) and Trim ([ / ]) keyboard shortcuts disabled for this release:
+    // window.addEventListener('keydown', (e) => {
+    //   if (e.target.matches('input, textarea')) return;
+    //   if (e.key === 's' || e.key === 'S') {
+    //     e.preventDefault();
+    //     this.splitAtPlayhead();
+    //   } else if (e.key === '[') {
+    //     e.preventDefault();
+    //     this.trimStart();
+    //   } else if (e.key === ']') {
+    //     e.preventDefault();
+    //     this.trimEnd();
+    //   }
+    // });
   }
 
   getCurrentTime() {
