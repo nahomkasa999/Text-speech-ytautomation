@@ -14,7 +14,30 @@ A complete, high-fidelity AI audiobook narrator application built for long-form 
 
 ---
 
-## 🚀 Quick Start
+## 💾 Download & Install (Windows)
+
+1. Open the repository's **Releases** page and download **`BookNarrator-Setup-<version>.exe`**.
+2. Double-click it. It installs in a few seconds, **no admin rights needed**, and adds a Start-menu (and optional desktop) shortcut.
+3. Launch **AI Book Narrator Studio**. The local Kokoro voice is already included, so it works offline straight away.
+
+Prefer not to install? Download **`BookNarrator-Portable-<version>.exe`** and just run it (it opens a bit slower because it unpacks itself on each launch).
+
+> Windows SmartScreen may show "Windows protected your PC" because the app isn't code-signed yet: click **More info → Run anyway**.
+
+Your projects, audio and drafts are saved in `%LOCALAPPDATA%\BookNarrator` (kept across updates). For a fully portable setup, create an `outputs` folder next to the `.exe` and data will be stored there instead.
+
+### 📦 Publishing a new release (maintainers)
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+GitHub Actions (`.github/workflows/build.yml`) builds the Windows installer, the portable `.exe` and a Linux bundle, then attaches them to a GitHub Release. To build locally instead, run `python build.py` (on Windows, install [Inno Setup 6](https://jrsoftware.org/isdl.php) to also get the single `Setup.exe`).
+
+---
+
+## 🚀 Quick Start (from source)
 
 1. Start the studio server:
    ```bash

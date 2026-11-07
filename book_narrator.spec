@@ -10,7 +10,7 @@ All specifications can be adjusted via environment variables or GitHub Actions i
 
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
@@ -27,12 +27,23 @@ datas = [
 if BUNDLE_MODELS and os.path.exists('models'):
     datas.append(('models', 'models'))
 
-try:
-    datas += collect_data_files('espeakng_loader')
-except Exception:
-    pass
+binaries = []
+hiddenimports = []
 
-hiddenimports = [
+# Packages that ship data files / native libraries the local Kokoro engine needs:
+#   kokoro_onnx     -> config.json (required at runtime)
+#   espeakng_loader -> libespeak-ng (.dll/.so) + espeak-ng-data voices
+#   phonemizer      -> share/ data files
+for pkg in ('kokoro_onnx', 'espeakng_loader', 'phonemizer'):
+    try:
+        pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
+        datas += pkg_datas
+        binaries += pkg_binaries
+        hiddenimports += pkg_hidden
+    except Exception as exc:
+        print(f"[spec] warning: could not collect {pkg}: {exc}")
+
+hiddenimports += [
     'uvicorn.logging',
     'uvicorn.loops',
     'uvicorn.loops.auto',
@@ -46,14 +57,13 @@ hiddenimports = [
     'kokoro_onnx',
     'onnxruntime',
     'soundfile',
-    'scipy',
     'numpy',
 ]
 
 a = Analysis(
     ['desktop.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -81,7 +91,7 @@ if ONEFILE:
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=True,
+        upx=False,
         upx_exclude=[],
         runtime_tmpdir=None,
         console=SHOW_CONSOLE,
@@ -102,7 +112,7 @@ else:
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=True,
+        upx=False,
         console=SHOW_CONSOLE,
         disable_windowed_traceback=False,
         argv_emulation=False,
@@ -116,7 +126,7 @@ else:
         a.zipfiles,
         a.datas,
         strip=False,
-        upx=True,
+        upx=False,
         upx_exclude=[],
         name=APP_NAME,
     )

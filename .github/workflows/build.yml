@@ -1,103 +1,184 @@
-name: Build Standalone Desktop Apps (Windows & Linux)
+name: Build Desktop Apps (Windows installer + portable exe, Linux)
+
+# How to publish a downloadable release:
+#   git tag v1.0.0 && git push origin v1.0.0
+# The Windows "BookNarrator-Setup-<version>.exe" (recommended), the portable
+# single .exe and the Linux bundle are attached to a GitHub Release automatically.
+# You can also run this workflow by hand (Actions tab -> Run workflow); the files
+# are then available as workflow artifacts.
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       app_name:
-        description: 'Application / Binary Name'
+        description: 'Executable name (no spaces)'
         required: true
         default: 'book-narrator'
         type: string
       bundle_models:
-        description: 'Bundle Kokoro ONNX model weights inside package?'
+        description: 'Bundle Kokoro voice model inside the app (works offline right after install)?'
         required: true
         default: true
         type: boolean
-      package_type:
-        description: 'Packaging style (onedir: recommended folder, or onefile: single .exe)'
-        required: true
-        default: 'onedir'
-        type: choice
-        options:
-          - onedir
-          - onefile
       show_console:
-        description: 'Show terminal console on launch? (false for silent GUI app)'
+        description: 'Show a debug console window on launch?'
         required: true
         default: false
         type: boolean
       model_url:
-        description: 'Kokoro ONNX Model Download URL'
+        description: 'Kokoro ONNX model download URL'
         required: false
         default: 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx'
         type: string
       voices_url:
-        description: 'Kokoro voices.bin Download URL'
+        description: 'Kokoro voices.bin download URL'
         required: false
         default: 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin'
         type: string
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: ${{ github.event.inputs.app_name || 'book-narrator' }}
+  BUNDLE_MODELS: ${{ github.event.inputs.bundle_models || 'true' }}
+  SHOW_CONSOLE: ${{ github.event.inputs.show_console || 'false' }}
+  MODEL_URL: ${{ github.event.inputs.model_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx' }}
+  VOICES_URL: ${{ github.event.inputs.voices_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' }}
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            platform_suffix: linux
-            compress_cmd: tar -czf
-            archive_ext: tar.gz
           - os: windows-latest
-            platform_suffix: windows
-            compress_cmd: zip
-            archive_ext: zip
-
-    env:
-      APP_NAME: ${{ github.event.inputs.app_name || 'book-narrator' }}
-      BUNDLE_MODELS: ${{ github.event.inputs.bundle_models || 'true' }}
-      ONEFILE: ${{ (github.event.inputs.package_type == 'onefile') && 'true' || 'false' }}
-      SHOW_CONSOLE: ${{ github.event.inputs.show_console || 'false' }}
+            platform: windows
+          - os: ubuntu-latest
+            platform: linux
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Work out version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "APP_VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_ENV"
+          else
+            echo "APP_VERSION=0.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller pywebview
+          pip install -r requirements.txt
 
-      - name: Download Kokoro Model Weights (if enabled)
+      - name: Cache Kokoro model files
         if: ${{ env.BUNDLE_MODELS == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: kokoro-models-${{ hashFiles('.github/workflows/build.yml') }}
+
+      - name: Download Kokoro model files
+        if: ${{ env.BUNDLE_MODELS == 'true' }}
+        shell: bash
         run: |
           mkdir -p models
-          curl -L -o models/kokoro-v1.0.onnx "${{ github.event.inputs.model_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx' }}"
-          curl -L -o models/voices-v1.0.bin "${{ github.event.inputs.voices_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' }}"
-        shell: bash
+          [ -s models/kokoro-v1.0.onnx ] || curl -fL -o models/kokoro-v1.0.onnx "$MODEL_URL"
+          [ -s models/voices-v1.0.bin ]  || curl -fL -o models/voices-v1.0.bin  "$VOICES_URL"
+          ls -la models
 
-      - name: Build with PyInstaller (Using Dynamic Spec)
+      # ---- Windows: installer (recommended) + portable single exe ----
+      - name: Build app folder (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          ONEFILE: 'false'
         run: pyinstaller --noconfirm book_narrator.spec
 
-      - name: Package Linux Bundle
+      - name: Build portable single exe (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          ONEFILE: 'true'
+        run: pyinstaller --noconfirm --distpath dist/portable --workpath build/portable book_narrator.spec
+
+      - name: Install Inno Setup (if missing)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+
+      - name: Build Setup.exe installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DAppVersion=$env:APP_VERSION" "/DAppExeName=$env:APP_NAME" installer\book_narrator.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Collect Windows release files
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p release
+          cp "dist/installer/BookNarrator-Setup-${APP_VERSION}.exe" release/
+          cp "dist/portable/${APP_NAME}.exe" "release/BookNarrator-Portable-${APP_VERSION}.exe"
+          ls -la release
+
+      # ---- Linux: folder bundle ----
+      - name: Build app folder (Linux)
+        if: runner.os == 'Linux'
+        env:
+          ONEFILE: 'false'
+        run: pyinstaller --noconfirm book_narrator.spec
+
+      - name: Collect Linux release files
         if: runner.os == 'Linux'
         run: |
-          cd dist
-          tar -czf "../${{ env.APP_NAME }}-linux.tar.gz" *
-        shell: bash
+          mkdir -p release
+          tar -czf "release/BookNarrator-Linux-${APP_VERSION}.tar.gz" -C dist "${APP_NAME}"
+          ls -la release
 
-      - name: Package Windows Bundle
-        if: runner.os == 'Windows'
-        run: |
-          Compress-Archive -Path dist\* -DestinationPath "${{ env.APP_NAME }}-windows.zip"
-        shell: pwsh
-
-      - name: Upload Artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.APP_NAME }}-${{ matrix.platform_suffix }}
-          path: ${{ env.APP_NAME }}-${{ matrix.platform_suffix }}.${{ matrix.archive_ext }}
+          name: BookNarrator-${{ matrix.platform }}
+          path: release/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          body: |
+            ### Download for Windows
+            - **BookNarrator-Setup-*.exe** (recommended): double-click, it installs in seconds (no admin needed) and opens in ~2 s every time.
+            - **BookNarrator-Portable-*.exe**: no install, just run it. Slower to open (unpacks itself on every launch, ~5-20 s).
+
+            Windows SmartScreen may say "Windows protected your PC" because the app is not code-signed yet: click **More info -> Run anyway**.
