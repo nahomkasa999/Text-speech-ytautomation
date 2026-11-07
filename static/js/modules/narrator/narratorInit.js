@@ -12,8 +12,7 @@ import { setupPauseAndSpeedControls } from './pauseControls.js';
 import { DraftService } from '../services/draftService.js';
 import { ModeSwitcher } from '../ui/modeSwitcher.js';
 import { ExportManager } from '../studio/exporter/exportManager.js';
-// Gemini Voice Design is disabled for this release (planned for the next version).
-// import { VoiceDesignManager } from './voiceDesign.js';
+import { VoiceDesignManager } from './voiceDesign.js';
 
 export function createNarratorSubsystem({ el, state, scene, studio }) {
   const refreshStats = () => updateTextStats(el.bookText, state.speed, el.statWords, el.statChars, el.statTime);
@@ -50,14 +49,13 @@ export function createNarratorSubsystem({ el, state, scene, studio }) {
 
   setupVoicePreview({ el, state });
 
-  // Gemini Voice Design is disabled for this release (planned for the next version).
-  // new VoiceDesignManager({
-  //   el, state,
-  //   callbacks: {
-  //     renderVoices: () => engineSelector.renderVoices(),
-  //     onVoiceCreated: () => draftService.debouncedSaveDraft()
-  //   }
-  // });
+  new VoiceDesignManager({
+    el, state,
+    callbacks: {
+      renderVoices: () => engineSelector.renderVoices(),
+      onVoiceCreated: () => draftService.debouncedSaveDraft()
+    }
+  });
 
   new NarrationGenerator({
     el, state,

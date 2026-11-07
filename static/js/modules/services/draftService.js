@@ -121,8 +121,7 @@ export class DraftService {
       this.el.pauseSentVal.textContent = `${draft.sentencePause.toFixed(2)}s`;
     }
     if (draft.engine) {
-      // Gemini Voice Design is disabled for now; fall back to the local engine.
-      this.state.engine = draft.engine === 'voice_design' ? 'local' : draft.engine;
+      this.state.engine = draft.engine;
       this.el.engineTabs.forEach(t => t.classList.toggle('active', t.dataset.engine === this.state.engine));
       this.el.panelDeployedSettings.classList.toggle('hidden', this.state.engine !== 'deployed');
       this.el.panelCloudSettings.classList.toggle('hidden', this.state.engine !== 'cloud_api');

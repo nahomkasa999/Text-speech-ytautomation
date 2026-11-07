@@ -12,6 +12,18 @@ from src.services.engine_service import gemini_engine
 
 router = APIRouter(prefix="/api/voice-design", tags=["voice-design"])
 
+
+def _ui_voice(v: dict) -> dict:
+    name = v.get("display_name") or v["id"]
+    return {
+        "id": v["id"],
+        "name": f"★ {name} (designed)",
+        "gender": v.get("gender", ""),
+        "description": v.get("description") or (v.get("prompted") or {}).get("input") or "Your designed Gemini voice",
+        "kind": "designed",
+    }
+
+
 @router.post("/create")
 def create_custom_voice(req: CreateVoiceDesignRequest):
     try:
@@ -23,38 +35,38 @@ def create_custom_voice(req: CreateVoiceDesignRequest):
             language_code=req.language_code,
             model=req.model
         )
-
-        voice_id = created.get("id") or created.get("name", "voice_custom")
-        sample_audio = created.get("sample_audio", {})
-        preview_url = ""
-
-        if sample_audio and sample_audio.get("data"):
-            os.makedirs(AUDIO_DIR, exist_ok=True)
-            safe_id = voice_id.replace("/", "_")
-            preview_filename = f"preview_{safe_id}.wav"
-            preview_path = os.path.join(AUDIO_DIR, preview_filename)
-            audio_bytes = base64.b64decode(sample_audio["data"])
-            with open(preview_path, "wb") as f:
-                f.write(audio_bytes)
-            preview_url = f"/outputs/audio/{preview_filename}"
-
-        return {
-            "status": "success",
-            "voice_id": voice_id,
-            "display_name": req.display_name,
-            "preview_url": preview_url,
-            "sample_audio": sample_audio
-        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    voice_id = created["id"]
+    preview_url = ""
+    sample_audio = created.get("sample_audio") or {}
+    if sample_audio.get("data"):
+        os.makedirs(AUDIO_DIR, exist_ok=True)
+        preview_filename = f"preview_{voice_id}.wav"
+        with open(os.path.join(AUDIO_DIR, preview_filename), "wb") as f:
+            f.write(base64.b64decode(sample_audio["data"]))
+        preview_url = f"/audio/{preview_filename}"  # served by the narration router
+
+    created.setdefault("display_name", req.display_name)
+    created.setdefault("description", req.description)
+    return {
+        "status": "success",
+        "voice_id": voice_id,
+        "display_name": req.display_name,
+        "preview_url": preview_url,
+        "voice": _ui_voice(created),
+    }
+
 
 @router.get("/list")
 def list_custom_voices(api_key: str = Query(..., description="Gemini API Key")):
     try:
         voices = gemini_engine.list_prompted_voices(api_key=api_key)
-        return {"status": "success", "voices": voices}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    return {"status": "success", "voices": [_ui_voice(v) for v in voices]}
+
 
 @router.delete("/{voice_id}")
 def delete_custom_voice(voice_id: str, api_key: str = Query(..., description="Gemini API Key")):

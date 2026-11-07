@@ -4,8 +4,7 @@ System status and available voices inspection routes.
 
 import os
 from fastapi import APIRouter
-from src.services.engine_service import local_engine, deployed_engine, cloud_engine
-# from src.services.engine_service import gemini_engine  # Gemini disabled until next release
+from src.services.engine_service import local_engine, deployed_engine, cloud_engine, gemini_engine
 
 router = APIRouter(prefix="/api", tags=["status"])
 
@@ -27,5 +26,5 @@ def get_voices():
         "local": local_engine.get_available_voices(),
         "deployed": deployed_engine.get_available_voices(),
         "cloud_api": cloud_engine.get_available_voices(),
-        # "voice_design": gemini_engine.get_available_voices()  # Gemini disabled until next release
+        "voice_design": gemini_engine.get_available_voices()
     }

@@ -31,24 +31,33 @@ export class EngineSelector {
     }
   }
 
-  renderVoices() {
+  /** Voices for the active engine; Gemini also lists the user's designed voices first. */
+  getVoiceList() {
     const list = this.state.voices[this.state.engine] || [];
+    if (this.state.engine === 'voice_design') return [...(this.state.designedVoices || []), ...list];
+    return list;
+  }
+
+  renderVoices() {
+    const list = this.getVoiceList();
     this.el.voiceSelect.innerHTML = '';
     list.forEach(v => {
       const opt = document.createElement('option');
       opt.value = v.id;
       opt.textContent = v.name;
-      if (v.default || v.id === this.state.selectedVoice) {
-        opt.selected = true;
-        this.state.selectedVoice = v.id;
-      }
       this.el.voiceSelect.appendChild(opt);
     });
+    // Keep the saved voice if this engine has it, otherwise use the engine's default.
+    const keep = list.find(v => v.id === this.state.selectedVoice) || list.find(v => v.default) || list[0];
+    if (keep) {
+      this.el.voiceSelect.value = keep.id;
+      this.state.selectedVoice = keep.id;
+    }
     this.updateVoiceDescription();
   }
 
   updateVoiceDescription() {
-    const list = this.state.voices[this.state.engine] || [];
+    const list = this.getVoiceList();
     const current = list.find(v => v.id === this.el.voiceSelect.value);
     this.el.voiceDesc.textContent = (current && current.description)
       ? current.description

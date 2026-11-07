@@ -10,6 +10,7 @@ A complete, high-fidelity AI audiobook narrator application built for long-form 
 | :--- | :--- | :--- |
 | **1. Local (Kokoro-82M)** | Completely offline narration, 0 cloud cost, fast generation | Standard laptop CPU (Pre-downloaded & 100% ready) |
 | **2. Deployed GPU (RunPod)** | Expressive storytelling, voice design, vocal events `(sigh)`, `(laugh)` | RunPod / Breeze-TTS-2 or OpenAI-compatible endpoint URL |
+| **Gemini (TTS + Voice Design)** | 30 prebuilt Gemini voices, plus custom voices designed from a text description | Gemini API key from aistudio.google.com/api-keys (paste it in the Gemini panel) |
 | **3. Cloud API** | Instant cloud generation with zero setup | OpenAI, ElevenLabs, or BreezeBlue API key |
 
 ---
