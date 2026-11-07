@@ -20,7 +20,8 @@ function getNarratorElements() {
     voiceSelect: document.getElementById('voice-select'),
     voiceDesc: document.getElementById('voice-desc'),
     btnPreviewVoice: document.getElementById('btn-preview-voice'),
-    previewAudioPlayer: document.getElementById('preview-audio-player'),
+    // No <audio> tag in the layout: fall back to an off-DOM player so Play Sample works.
+    previewAudioPlayer: document.getElementById('preview-audio-player') || new Audio(),
     speedSlider: document.getElementById('speed-slider'),
     speedVal: document.getElementById('speed-val'),
     pauseParaSlider: document.getElementById('pause-para-slider'),
@@ -29,6 +30,7 @@ function getNarratorElements() {
     pauseSentVal: document.getElementById('pause-sent-val'),
     panelVoiceDesignSettings: document.getElementById('panel-voice-design-settings'),
     geminiApiKey: document.getElementById('gemini-api-key'),
+    geminiKeyStatus: document.getElementById('gemini-key-status'),
     voiceDesignPrompt: document.getElementById('voice-design-prompt'),
     voiceDesignName: document.getElementById('voice-design-name'),
     voiceDesignGender: document.getElementById('voice-design-gender'),
