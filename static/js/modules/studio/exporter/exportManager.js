@@ -3,10 +3,23 @@
  */
 
 import { exportVideoFast, isFastExportSupported, ExportCancelledError } from '../../../video/exporter.js';
-import { saveBlob } from '../../services/fileSaver.js';
+import { saveBlob, saveServerFile } from '../../services/fileSaver.js';
 import { runRealtimeExport } from './realtimeRecorder.js';
 import { ExportOptionsModal } from './exportOptionsModal.js';
 import { showToast } from '../../ui/toast.js';
+
+// Longer than this, the real-time fallback would take as long as the video and
+// hold it all in memory, so a failed fast export is reported instead.
+const REALTIME_FALLBACK_MAX_SECONDS = 10 * 60;
+
+function formatEta(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
+  return `${s}s`;
+}
 
 export class ExportManager {
   constructor({ el, state, scene, callbacks }) {
@@ -45,13 +58,39 @@ export class ExportManager {
     );
   }
 
+  progressLabel(stage, p, now) {
+    if (stage !== this.etaStage) {
+      this.etaStage = stage;
+      this.etaStart = { t: now, p };
+    }
+    const pct = `${Math.round(p * 100)}%`;
+    const elapsed = (now - this.etaStart.t) / 1000;
+    const done = p - this.etaStart.p;
+    const eta = (stage === 'Rendering video' && done > 0.002 && elapsed > 3)
+      ? ` · ${formatEta((elapsed / done) * (1 - p))} left`
+      : '';
+    return `${stage} ${pct}${eta} (click to cancel)`;
+  }
+
+  async saveExport(url, filename) {
+    const saved = await saveServerFile(`${url}?name=${encodeURIComponent(filename)}`, filename);
+    if (!saved) {
+      showToast('Video was not saved yet.', 'info', {
+        duration: 60000,
+        actionLabel: 'Save…',
+        onAction: () => this.saveExport(url, filename)
+      });
+    }
+  }
+
   async runFastExport(audioUrl, exportOpts) {
     this.exportAbort = new AbortController();
+    this.etaStage = null;
     this.el.exportBtnLabel.textContent = 'Preparing… (click to cancel)';
     await Promise.all([document.fonts?.ready, this.preloadSceneImages()]);
 
     const startedAt = performance.now();
-    const { blob, ext, codecs } = await exportVideoFast({
+    const { url, size, ext, codecs } = await exportVideoFast({
       width: exportOpts.width || 1920,
       height: exportOpts.height || 1080,
       renderFrame: (ctx, t) => this.callbacks.renderVideoFrame(t, ctx),
@@ -65,7 +104,7 @@ export class ExportManager {
       videoBitrate: 6000000,
       signal: this.exportAbort.signal,
       onProgress: (p, stage, audioTime) => {
-        this.el.exportBtnLabel.textContent = `${stage} ${Math.round(p * 100)}% (click to cancel)`;
+        this.el.exportBtnLabel.textContent = this.progressLabel(stage, p, performance.now());
         if (audioTime !== undefined) {
           this.callbacks.updatePlayheadPosition(audioTime, this.el.videoAudioPlayer.duration || 1);
         }
@@ -73,10 +112,10 @@ export class ExportManager {
     });
 
     const filename = `${this.getExportFilename()}.${ext}`;
-    this.downloadBlob(blob, filename);
-    const secs = ((performance.now() - startedAt) / 1000).toFixed(1);
-    console.info(`[Export] ${filename} (${codecs}, ${(blob.size / 1e6).toFixed(1)} MB) in ${secs}s`);
-    showToast(`Video rendered in ${secs}s. Choose where to save it.`, 'success');
+    const took = formatEta((performance.now() - startedAt) / 1000);
+    console.info(`[Export] ${filename} (${codecs}, ${(size / 1e6).toFixed(1)} MB) in ${took}`);
+    showToast(`Video rendered in ${took}. Choose where to save it.`, 'success');
+    await this.saveExport(url, filename);
   }
 
   finishUI() {
@@ -106,6 +145,7 @@ export class ExportManager {
             showToast('Export cancelled.', 'info');
             return;
           }
+          if ((this.el.videoAudioPlayer.duration || 0) > REALTIME_FALLBACK_MAX_SECONDS) throw err;
           console.warn('[Export] Fast export failed, falling back to real-time recording:', err);
         }
       }

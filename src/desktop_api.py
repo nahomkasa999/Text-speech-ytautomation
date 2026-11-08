@@ -73,7 +73,11 @@ class DesktopApi:
         return target
 
     def save_as(self, url_path: str, suggested_name: str) -> dict:
-        """Show a Save dialog and copy the server file there."""
+        """Show a Save dialog and put the server file there.
+
+        Temp files are moved (instant on the same disk, no second copy of a
+        multi-GB export) and kept when the dialog is cancelled, so the user can
+        try saving again instead of re-rendering."""
         try:
             source = resolve_server_path(url_path)
             if not source:
@@ -82,17 +86,13 @@ class DesktopApi:
             target = self._ask_save_path(suggested_name)
             if not target:
                 return {"ok": False, "cancelled": True}
-            shutil.copyfile(source, target)
+            if "/api/temp-file/" in url_path:
+                shutil.move(source, target)
+            else:
+                shutil.copyfile(source, target)
             return {"ok": True, "path": target}
         except Exception as exc:  # report to the UI instead of failing silently
             return {"ok": False, "error": str(exc)}
-        finally:
-            src = resolve_server_path(url_path) if url_path and "/api/temp-file/" in url_path else None
-            if src:
-                try:
-                    os.remove(src)
-                except OSError:
-                    pass
 
     def reveal(self, path: str) -> bool:
         """Open the folder containing a saved file (selecting it on Windows)."""

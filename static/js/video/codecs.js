@@ -2,7 +2,7 @@
  * Hardware WebCodecs Configuration and Queue Helpers.
  */
 
-import { SAMPLE_RATE } from './audioProcessing.js';
+import { ENCODER_SAMPLE_RATE } from './audioProcessing.js';
 
 export function isFastExportSupported() {
   return typeof VideoEncoder !== 'undefined'
@@ -56,7 +56,7 @@ export async function pickAudioConfig(numberOfChannels) {
     { muxCodec: 'opus', codec: 'opus' },
   ];
   for (const c of candidates) {
-    const config = { codec: c.codec, sampleRate: SAMPLE_RATE, numberOfChannels, bitrate: 160000 };
+    const config = { codec: c.codec, sampleRate: ENCODER_SAMPLE_RATE, numberOfChannels, bitrate: 160000 };
     try {
       const { supported } = await AudioEncoder.isConfigSupported(config);
       if (supported) return { config, muxCodec: c.muxCodec };
