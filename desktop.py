@@ -129,9 +129,42 @@ def _open_window(url: str, storage_dir: str) -> None:
             print("\nShutting down AI Book Narrator Studio...")
 
 
+UPDATE_CONFIRM_TIMEOUT_S = float(os.environ.get("BOOKNARRATOR_CONFIRM_TIMEOUT", "90"))
+
+
+def _rollback_watchdog(version: str) -> None:
+    """A freshly installed update must confirm it works (the UI calls
+    /api/update/confirm once loaded). If it doesn't, go back to the previous version."""
+    import app_boot
+    time.sleep(UPDATE_CONFIRM_TIMEOUT_S)
+    if app_boot.is_still_trying(version):
+        print(f"[Update] Version {version} did not start correctly; rolling back.")
+        app_boot.mark_current_failed()
+        app_boot.relaunch_and_exit()
+
+
 def main() -> None:
-    from src.config import APP_DATA_DIR
+    import app_boot
+
+    # After an update the app restarts itself: wait for the old window to close.
+    if "--restart-after" in sys.argv:
+        try:
+            app_boot.wait_for_pid_exit(int(sys.argv[sys.argv.index("--restart-after") + 1]))
+        except (ValueError, IndexError):
+            pass
+
+    # Pick the app code to run (latest installed update, or the copy inside the .exe).
+    # Must happen before anything from src/ is imported.
+    boot = app_boot.select_app_code()
+    try:
+        from src.config import APP_DATA_DIR
+    except Exception:
+        if boot["version"]:
+            app_boot.mark_current_failed()
+            app_boot.relaunch_and_exit()
+        raise
     _redirect_missing_streams(os.path.join(APP_DATA_DIR, "logs"))
+    print(f"[Boot] App code: {boot['version'] or 'built-in'}{' (new update)' if boot['trying'] else ''}")
 
     port, already_running = _choose_port()
     server_thread = None
@@ -139,11 +172,18 @@ def main() -> None:
         server_thread = threading.Thread(target=_start_server, args=(port,), daemon=True)
         server_thread.start()
         if not _wait_for_server(port, server_thread):
+            if boot["version"]:
+                print(f"[Update] Version {boot['version']} failed to start; rolling back.")
+                app_boot.mark_current_failed()
+                app_boot.relaunch_and_exit()
             _show_fatal_error(
                 "The narration server could not start.\n\n"
                 f"Details were written to:\n{os.path.join(APP_DATA_DIR, 'logs', 'app.log')}"
             )
             sys.exit(1)
+
+    if boot["trying"]:
+        threading.Thread(target=_rollback_watchdog, args=(boot["version"],), daemon=True).start()
 
     _open_window(f"http://{HOST}:{port}", os.path.join(APP_DATA_DIR, "outputs", "webview_storage"))
 

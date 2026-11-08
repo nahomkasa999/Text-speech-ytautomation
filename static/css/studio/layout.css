@@ -293,3 +293,40 @@
   color: var(--accent-blue);
   font-weight: 700;
 }
+
+/* ---------- Settings & in-app updates ---------- */
+.sidebar-footer-actions { display: flex; align-items: center; gap: 4px; }
+.left-sidebar.collapsed .sidebar-footer-actions { flex-direction: column; }
+
+.upd-backdrop {
+  position: fixed; inset: 0; z-index: 3000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.upd-dialog {
+  width: min(440px, 100%);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  animation: pop-in 0.15s ease-out;
+}
+.upd-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 6px; }
+.upd-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.upd-close { background: none; border: none; color: var(--text-secondary); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.upd-close:hover { color: var(--text-primary); }
+.upd-body { padding: 4px 16px 16px; font-size: 13px; color: var(--text-secondary); }
+.upd-label { font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-disabled); margin-bottom: 6px; }
+.upd-version { margin: 0 0 10px; color: var(--text-primary); font-weight: 600; }
+.upd-section { margin-top: 12px; }
+.upd-card { background: var(--bg-panel-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px 12px; }
+.upd-card-title { color: var(--text-primary); font-weight: 600; }
+.upd-notes { margin: 6px 0 0; white-space: pre-line; line-height: 1.45; }
+.upd-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.upd-muted { color: var(--text-secondary); margin-right: auto; }
+.upd-ok { margin: 0; color: var(--accent-success); }
+.upd-warn { margin: 10px 0 0; color: var(--accent-warning); }
+.upd-error { margin: 10px 0 0; color: var(--accent-danger); }
+.upd-progress { height: 6px; margin-top: 12px; border-radius: 99px; background: var(--bg-hover); overflow: hidden; }
+.upd-progress-fill { height: 100%; background: var(--accent-blue); transition: width 0.3s ease; }

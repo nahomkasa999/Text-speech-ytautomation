@@ -16,6 +16,7 @@ from src.routes.narration import router as narration_router
 from src.routes.views import router as views_router
 from src.routes.voice_design import router as voice_design_router
 from src.routes.files import router as files_router
+from src.routes.updates import router as updates_router
 
 app = FastAPI(title="AI Book Narrator Studio")
 
@@ -28,6 +29,7 @@ app.include_router(status_router)
 app.include_router(narration_router)
 app.include_router(voice_design_router)
 app.include_router(files_router)
+app.include_router(updates_router)
 
 # Mount static frontend
 os.makedirs(STATIC_DIR, exist_ok=True)

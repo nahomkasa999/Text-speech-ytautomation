@@ -40,6 +40,10 @@ if getattr(sys, 'frozen', False):
     STATIC_DIR = os.path.join(BUNDLE_DIR, "static")
     if not os.path.exists(STATIC_DIR):
         STATIC_DIR = os.path.join(BUNDLE_DIR, "_internal", "static")
+    # An installed in-app update (see app_boot.py) brings its own web UI.
+    _update_dir = os.environ.get("BOOKNARRATOR_APP_DIR")
+    if _update_dir and os.path.isfile(os.path.join(_update_dir, "static", "index.html")):
+        STATIC_DIR = os.path.join(_update_dir, "static")
     APP_DATA_DIR = _frozen_user_data_dir()
     AUDIO_DIR = os.path.join(APP_DATA_DIR, "outputs", "audio")
     IMAGES_DIR = os.path.join(APP_DATA_DIR, "outputs", "images")

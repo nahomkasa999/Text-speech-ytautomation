@@ -27,3 +27,4 @@ outputs/draft.json
 .idea/
 outputs/webview_storage/
 outputs/tmp/
+version.json

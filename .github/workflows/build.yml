@@ -1,16 +1,22 @@
 name: Build Desktop Apps (Windows installer + portable exe, Linux)
 
-# How to publish a downloadable release:
-#   git tag v1.0.0 && git push origin v1.0.0
-# The Windows "BookNarrator-Setup-<version>.exe" (recommended), the portable
-# single .exe and the Linux bundle are attached to a GitHub Release automatically.
-# You can also run this workflow by hand (Actions tab -> Run workflow); the files
-# are then available as workflow artifacts.
+# Releases & updates
+# - Every push to main publishes a small in-app update (a few hundred KB of app
+#   code) to the "updates" release. Installed apps pick it up and ask the user
+#   to update. No full installer is built unless the engine changed.
+# - Full installers (Setup.exe, portable exe, Linux) are built and released when:
+#   you run this workflow by hand, push a v* tag, or a push changes the engine
+#   (requirements.txt, book_narrator.spec, app_boot.py or desktop.py).
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
   workflow_dispatch:
     inputs:
       app_name:
@@ -55,7 +61,68 @@ env:
   VOICES_URL: ${{ github.event.inputs.voices_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' }}
 
 jobs:
+  # ---- Small in-app update package (every run) ----
+  update:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      build: ${{ steps.ver.outputs.build }}
+      engine_changed: ${{ steps.engine.outputs.changed }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Work out version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "build=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build update package
+        id: pkg
+        env:
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          python3 scripts/make_update_package.py \
+            --version "${{ steps.ver.outputs.version }}" \
+            --build "${{ steps.ver.outputs.build }}" \
+            --repo "${{ github.repository }}" \
+            --notes "${NOTES:-$(git log -1 --format=%B)}"
+
+      - name: Did the engine change? (then users need the full installer)
+        id: engine
+        shell: bash
+        run: |
+          published=$(curl -fsSL "https://github.com/${{ github.repository }}/releases/download/updates/update.json" 2>/dev/null \
+            | python3 -c "import json,sys; print(json.load(sys.stdin).get('engine',''))" 2>/dev/null || true)
+          echo "published engine: '${published}', new engine: '${{ steps.pkg.outputs.engine }}'"
+          if [[ "${published}" != "${{ steps.pkg.outputs.engine }}" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Keep update files for publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-channel
+          path: dist/update-channel/*
+
+      - name: Keep version.json for the installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-info
+          path: version.json
+
+  # ---- Full installers (only when needed) ----
   build:
+    needs: update
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || needs.update.outputs.engine_changed == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -72,12 +139,13 @@ jobs:
 
       - name: Work out version
         shell: bash
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "APP_VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_ENV"
-          else
-            echo "APP_VERSION=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
-          fi
+        run: echo "APP_VERSION=${{ needs.update.outputs.version }}" >> "$GITHUB_ENV"
+
+      - name: Add version.json (lets the installed app receive in-app updates)
+        uses: actions/download-artifact@v4
+        with:
+          name: version-info
+          path: .
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -166,13 +234,18 @@ jobs:
           path: release/*
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')
-    needs: build
+    needs: [update, build]
+    if: >-
+      needs.build.result == 'success' && (
+        startsWith(github.ref, 'refs/tags/v') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true') ||
+        (github.event_name == 'push' && needs.update.outputs.engine_changed == 'true'))
     runs-on: ubuntu-latest
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: BookNarrator-*
           path: release
           merge-multiple: true
 
@@ -180,7 +253,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           # Tag pushes use their own tag; manual runs create v1.0.<run number> on the built commit.
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v1.0.{0}', github.run_number) }}
+          tag_name: v${{ needs.update.outputs.version }}
           target_commitish: ${{ github.sha }}
           files: release/*
           generate_release_notes: true
@@ -190,3 +263,30 @@ jobs:
             - **BookNarrator-Portable-*.exe**: no install, just run it. Slower to open (unpacks itself on every launch, ~5-20 s).
 
             Windows SmartScreen may say "Windows protected your PC" because the app is not code-signed yet: click **More info -> Run anyway**.
+
+  # ---- Publish the in-app update (installed apps check this) ----
+  publish-update:
+    needs: [update, build, release]
+    # If the engine changed, wait until the new installer is released, so the
+    # "needs the full installer" link never points at an old installer.
+    if: >-
+      always() && needs.update.result == 'success' &&
+      (needs.update.outputs.engine_changed != 'true' || needs.release.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download update files
+        uses: actions/download-artifact@v4
+        with:
+          name: update-channel
+          path: update-channel
+
+      - name: Publish to the "updates" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: updates
+          name: In-app updates (used by the app's updater)
+          prerelease: true
+          make_latest: false
+          files: update-channel/*
+          body: |
+            This release is used by the app's built-in updater. To install the app, download the latest **BookNarrator-Setup** from the newest regular release instead.

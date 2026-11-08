@@ -24,6 +24,11 @@ datas = [
     ('static', 'static'),
 ]
 
+# version.json (written by CI) tells the in-app updater which version and
+# engine (set of libraries) this installer contains.
+if os.path.exists('version.json'):
+    datas.append(('version.json', '.'))
+
 if BUNDLE_MODELS and os.path.exists('models'):
     datas.append(('models', 'models'))
 
@@ -58,6 +63,17 @@ hiddenimports += [
     'onnxruntime',
     'soundfile',
     'numpy',
+    # Standard-library modules that small in-app updates may start using even
+    # though the current code does not (updates can't add modules to the .exe).
+    'zipfile', 'hashlib', 'hmac', 'uuid', 'shutil', 'tempfile', 'subprocess',
+    'urllib.request', 'urllib.parse', 'http.client', 'email.utils', 'csv',
+    'sqlite3', 'xml.etree.ElementTree', 'difflib', 'statistics', 'dataclasses',
+    'decimal', 'fractions', 'random', 'secrets', 'textwrap', 'unicodedata',
+    'concurrent.futures', 'queue', 'colorsys', 'wave', 'struct', 'zlib', 'gzip',
+    'io', 'pathlib', 'glob', 'fnmatch', 'heapq', 'bisect', 'itertools',
+    'functools', 'operator', 'copy', 'pprint', 'string', 're', 'datetime',
+    'calendar', 'locale', 'platform', 'getpass', 'socket', 'ssl', 'html',
+    'html.parser', 'mimetypes', 'base64', 'binascii', 'array', 'math',
 ]
 
 a = Analysis(
