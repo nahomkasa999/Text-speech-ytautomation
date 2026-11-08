@@ -354,3 +354,11 @@
 }
 .wave-layer-swatch input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
 .wave-layer-swatch input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
+
+/* ---------- Checkboxes in the inspector: normal panel text, small secondary option ---------- */
+.settings-scroll-area .checkbox-row { display: flex; align-items: center; gap: 8px; }
+.settings-scroll-area .checkbox-label { font-size: 13px; color: var(--text-primary); cursor: pointer; }
+.settings-scroll-area .checkbox-row .form-checkbox { width: 14px; height: 14px; margin: 0; flex-shrink: 0; }
+.checkbox-row.compact-check { gap: 6px; }
+.checkbox-row.compact-check .checkbox-label { font-size: 11px; color: var(--text-secondary); }
+.checkbox-row.compact-check .form-checkbox { width: 12px; height: 12px; }
