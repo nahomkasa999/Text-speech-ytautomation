@@ -199,6 +199,14 @@ function setupWidgetAndColorEvents(el, scene, interactionMgr, callbacks) {
     });
   });
 
+  document.getElementById('toggle-widget-sync')?.addEventListener('change', (e) => {
+    const widget = scene.getLayer('layer_player_widget') || scene.layers.find(ly => ly.type === 'audio_widget');
+    if (!widget) return;
+    widget.syncToVoice = e.target.checked;
+    callbacks.renderVideoFrame();
+    callbacks.debouncedSaveDraft();
+  });
+
   el.togglePlayerWidget.addEventListener('change', (e) => {
     const widgetLayer = scene.getLayer('layer_player_widget');
     if (widgetLayer) {

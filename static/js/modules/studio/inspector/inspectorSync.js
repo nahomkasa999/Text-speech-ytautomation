@@ -37,7 +37,9 @@ export function syncInspectorFromLayer(el, scene, interactionMgr) {
     document.getElementById('weight-settings-group')?.classList.add('hidden');
     el.togglePlayerWidget.checked = l.visible;
 
-    const curStyle = l.widgetStyle || 'classic';
+    const curStyle = l.widgetStyle || 'ambient_flow';
+    const syncBox = document.getElementById('toggle-widget-sync');
+    if (syncBox) syncBox.checked = !!l.syncToVoice;
     el.widgetTmplBtns.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.style === curStyle);
     });

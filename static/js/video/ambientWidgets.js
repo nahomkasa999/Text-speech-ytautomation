@@ -1,9 +1,9 @@
 /**
  * Ambient "always moving" player animations.
  *
- * Unlike the progress-bar widgets, these ignore the narration entirely: they
- * are driven only by time, so they keep flowing smoothly for the whole video
- * and give viewers something gentle to watch. Everything is deterministic
+ * By default they move on their own (driven only by time). With "Move with
+ * the voice" on, their size follows the narration's loudness envelope
+ * (precomputed on the server), while the flowing motion keeps going. Everything is deterministic
  * (no randomness), so the exported video matches the preview frame for frame.
  */
 
@@ -34,17 +34,18 @@ function strokeWave(ctx, b, { amp, freq, speed, phase, t, width, alpha }) {
 }
 
 /** Flow: three soft sine lines drifting at different speeds. */
-function drawFlow(ctx, b, t, color, thickness) {
+function drawFlow(ctx, b, t, color, thickness, energy) {
   ctx.strokeStyle = color;
   ctx.lineCap = 'round';
-  const amp = b.h * 0.32;
+  const amp = b.h * 0.32 * (energy ?? 1);
   strokeWave(ctx, b, { amp, freq: 1.6, speed: 1.1, phase: 0, t, width: thickness, alpha: 0.95 });
   strokeWave(ctx, b, { amp: amp * 0.75, freq: 2.3, speed: -0.8, phase: 1.7, t, width: thickness * 0.8, alpha: 0.55 });
   strokeWave(ctx, b, { amp: amp * 0.55, freq: 3.1, speed: 1.6, phase: 3.1, t, width: thickness * 0.6, alpha: 0.3 });
 }
 
 /** Ocean: layered filled waves rolling past each other. */
-function drawOcean(ctx, b, t, color) {
+function drawOcean(ctx, b, t, color, thickness, energy) {
+  const e = energy ?? 1;
   ctx.save();
   ctx.beginPath();
   ctx.roundRect ? ctx.roundRect(b.x, b.y, b.w, b.h, 14) : ctx.rect(b.x, b.y, b.w, b.h);
@@ -62,7 +63,8 @@ function drawOcean(ctx, b, t, color) {
     ctx.moveTo(b.x, b.y + b.h);
     for (let i = 0; i <= steps; i++) {
       const u = i / steps;
-      const py = b.y + b.h * l.level + Math.sin(u * l.freq * TAU + l.phase + t * l.speed) * b.h * l.amp;
+      // Quiet voice: calmer, lower water. Loud voice: taller, livelier waves.
+      const py = b.y + b.h * (l.level + (1 - e) * 0.22) + Math.sin(u * l.freq * TAU + l.phase + t * l.speed) * b.h * l.amp * e;
       ctx.lineTo(b.x + u * b.w, py);
     }
     ctx.lineTo(b.x + b.w, b.y + b.h);
@@ -73,13 +75,14 @@ function drawOcean(ctx, b, t, color) {
 }
 
 /** Ribbon: two crossing waves with a soft fill between them, like twisting silk. */
-function drawRibbon(ctx, b, t, color, thickness) {
+function drawRibbon(ctx, b, t, color, thickness, energy) {
+  const amp = energy ?? 1;
   const steps = Math.max(60, Math.round(b.w / 6));
   const top = [];
   const bottom = [];
   for (let i = 0; i <= steps; i++) {
     const u = i / steps;
-    const e = edge(u);
+    const e = edge(u) * amp;
     const s = Math.sin(u * 2.2 * TAU + t * 1.2);
     const twist = Math.sin(u * 1.1 * TAU - t * 0.7);
     const px = b.x + u * b.w;
@@ -106,7 +109,8 @@ function drawRibbon(ctx, b, t, color, thickness) {
 }
 
 /** Pulse: rounded bars breathing in a travelling wave (looks like music, isn't tied to it). */
-function drawPulse(ctx, b, t, color) {
+function drawPulse(ctx, b, t, color, thickness, energy) {
+  const e = energy ?? 1;
   const gap = 6;
   const barW = Math.max(4, Math.min(10, b.w / 90));
   const count = Math.floor(b.w / (barW + gap));
@@ -116,7 +120,7 @@ function drawPulse(ctx, b, t, color) {
     const u = (i + 0.5) / count;
     const wave = 0.5 + 0.5 * Math.sin(i * 0.33 - t * 2.4);
     const swell = 0.6 + 0.4 * Math.sin(i * 0.09 + t * 0.8);
-    const hBar = Math.max(barW, b.h * (0.12 + 0.82 * wave * swell) * (0.35 + 0.65 * edge(u)));
+    const hBar = Math.max(barW, b.h * (0.12 + 0.82 * wave * swell * e) * (0.35 + 0.65 * edge(u)));
     ctx.globalAlpha = 0.45 + 0.55 * wave;
     const bx = offset + i * (barW + gap);
     ctx.beginPath();
@@ -126,7 +130,8 @@ function drawPulse(ctx, b, t, color) {
 }
 
 /** Dot wave: a row of dots rising and falling like a stadium wave. */
-function drawDots(ctx, b, t, color) {
+function drawDots(ctx, b, t, color, thickness, energy) {
+  const e = energy ?? 1;
   const spacing = Math.max(16, Math.min(28, b.w / 40));
   const count = Math.floor(b.w / spacing);
   const offset = b.x + (b.w - (count - 1) * spacing) / 2;
@@ -134,7 +139,7 @@ function drawDots(ctx, b, t, color) {
   for (let i = 0; i < count; i++) {
     const u = i / Math.max(1, count - 1);
     const phase = Math.sin(i * 0.42 - t * 2.6);
-    const lift = phase * b.h * 0.32 * edge(u);
+    const lift = phase * b.h * 0.32 * edge(u) * e;
     const r = Math.max(2.5, spacing * (0.16 + 0.1 * (phase + 1) / 2));
     ctx.globalAlpha = 0.35 + 0.65 * (phase + 1) / 2;
     ctx.beginPath();
@@ -144,8 +149,9 @@ function drawDots(ctx, b, t, color) {
 }
 
 /** Breathe: a glowing line that softly breathes, with a light gliding back and forth. */
-function drawBreathe(ctx, b, t, color, thickness) {
-  const breath = 0.5 + 0.5 * Math.sin(t * 1.3);
+function drawBreathe(ctx, b, t, color, thickness, energy) {
+  // Synced: the glow breathes with the voice. Free: it breathes on its own.
+  const breath = energy == null ? 0.5 + 0.5 * Math.sin(t * 1.3) : energy;
   ctx.strokeStyle = color;
   ctx.lineCap = 'round';
   ctx.shadowColor = color;
@@ -180,11 +186,14 @@ export function isAmbientStyle(style) {
   return Object.prototype.hasOwnProperty.call(AMBIENT, style);
 }
 
-/** @param t seconds of animation time (video time on export, wall clock while idle in the editor) */
-export function drawAmbientWidget(ctx, layer, t, color) {
+/**
+ * @param t       seconds of animation time (video time on export, wall clock while idle in the editor)
+ * @param energy  null = move freely; 0..1 = follow the voice loudness ("Move with the voice")
+ */
+export function drawAmbientWidget(ctx, layer, t, color, energy = null) {
   const fn = AMBIENT[layer.widgetStyle];
   if (!fn) return;
   ctx.save();
-  fn(ctx, band(layer), t, color, Math.max(1.5, layer.thickness || 3));
+  fn(ctx, band(layer), t, color, Math.max(1.5, layer.thickness || 3), energy);
   ctx.restore();
 }

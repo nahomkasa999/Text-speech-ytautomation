@@ -117,6 +117,12 @@ class SessionManager:
         if target:
             # Clean up audio file if exists
             audio_path = os.path.join(self.audio_dir, target.get("audio_filename", ""))
+            envelope_path = audio_path + ".envelope.json"  # cached voice loudness curve
+            if target.get("audio_filename") and os.path.exists(envelope_path):
+                try:
+                    os.remove(envelope_path)
+                except Exception:
+                    pass
             if os.path.exists(audio_path):
                 try:
                     os.remove(audio_path)

@@ -15,6 +15,7 @@ from src.config import AUDIO_DIR
 from src.chunker import chunk_text_for_narration
 from src.models import GenerateRequest, PreviewRequest
 from src.services.engine_service import ENGINES, local_engine, session_mgr
+from src.services.voice_envelope import get_envelope
 
 router = APIRouter(tags=["narration"])
 
@@ -24,6 +25,14 @@ def serve_audio(filename: str):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Audio file not found")
     return FileResponse(path, media_type="audio/wav")
+
+@router.get("/api/voice-envelope/{filename}")
+def voice_envelope(filename: str):
+    """Loudness curve (30 fps) used by "Move with the voice" player animations."""
+    try:
+        return get_envelope(AUDIO_DIR, filename)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Audio file not found")
 
 @router.post("/api/preview")
 def preview_voice(req: PreviewRequest):

@@ -45,13 +45,30 @@ export class ShapeLayer extends Layer {
   }
 }
 
+// The old progress-bar styles were removed; projects that used one get the
+// closest always-moving animation instead.
+const LEGACY_WIDGET_STYLES = {
+  classic: 'ambient_flow',
+  capsule: 'ambient_flow',
+  gradient_pill: 'ambient_flow',
+  waveform: 'ambient_pulse',
+  equalizer: 'ambient_pulse',
+  minimal_dots: 'ambient_dots',
+  glow_line: 'ambient_glow',
+};
+
 export class AudioWidgetLayer extends Layer {
   constructor(data = {}) {
     super({ ...data, type: 'audio_widget' });
     this.type = 'audio_widget';
     this.endTime = 999999;
     this.name = data.name || 'Audio Player Bar';
-    this.widgetStyle = data.widgetStyle || 'classic';
+    const legacy = !data.widgetStyle || LEGACY_WIDGET_STYLES[data.widgetStyle];
+    this.widgetStyle = LEGACY_WIDGET_STYLES[data.widgetStyle] || data.widgetStyle || 'ambient_flow';
+    // Wave animations draw in a band of the layer height; 100px looks calm.
+    if (legacy && (typeof data.height !== 'number' || data.height >= 200)) this.height = 100;
+    // "Move with the voice": waves follow the narration loudness when true.
+    this.syncToVoice = !!data.syncToVoice;
     this.color = data.color || '#111827';
     this.thickness = typeof data.thickness === 'number' ? data.thickness : 4;
     this.showControls = data.showControls !== false;
@@ -63,6 +80,7 @@ export class AudioWidgetLayer extends Layer {
       ...super.toJSON(),
       type: 'audio_widget',
       widgetStyle: this.widgetStyle,
+      syncToVoice: this.syncToVoice,
       color: this.color,
       thickness: this.thickness,
       showControls: this.showControls,
