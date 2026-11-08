@@ -40,6 +40,12 @@ export function syncInspectorFromLayer(el, scene, interactionMgr) {
     const curStyle = l.widgetStyle || 'ambient_flow';
     const syncBox = document.getElementById('toggle-widget-sync');
     if (syncBox) syncBox.checked = !!l.syncToVoice;
+    // Size % = wave height relative to the default 100px.
+    const sizePct = Math.round(l.height || 100);
+    const sizeSlider = document.getElementById('widget-size-slider');
+    if (sizeSlider) sizeSlider.value = Math.min(1000, Math.max(20, sizePct));
+    const sizeVal = document.getElementById('widget-size-val');
+    if (sizeVal) sizeVal.textContent = `${sizePct}%`;
     el.widgetTmplBtns.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.style === curStyle);
     });

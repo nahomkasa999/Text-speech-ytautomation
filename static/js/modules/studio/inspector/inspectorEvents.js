@@ -199,6 +199,36 @@ function setupWidgetAndColorEvents(el, scene, interactionMgr, callbacks) {
     });
   });
 
+  // Size slider: scales the wave animation up/down around its centre.
+  document.getElementById('widget-size-slider')?.addEventListener('input', (e) => {
+    const widget = scene.getLayer('layer_player_widget') || scene.layers.find(ly => ly.type === 'audio_widget');
+    if (!widget) return;
+    const CANVAS_W = scene.canvas?.width || 1920;
+    const CANVAS_H = scene.canvas?.height || 1080;
+    const newH = Number(e.target.value);
+    const oldH = widget.height || 100;
+    // Width at 100% size. Re-derived from the current shape unless the width is
+    // already capped at the frame edge, so dragged shapes keep their proportions.
+    if (!widget.baseWidth || widget.width < CANVAS_W - 1) widget.baseWidth = (widget.width * 100) / oldH;
+    const cx = widget.x + widget.width / 2;
+    const cy = widget.y + oldH / 2;
+    // Grow freely in height; width stops at the frame so the wave stays visible.
+    widget.width = Math.max(40, Math.min(CANVAS_W, Math.round(widget.baseWidth * newH / 100)));
+    widget.height = newH;
+    widget.x = Math.round(Math.min(Math.max(cx - widget.width / 2, 0), CANVAS_W - widget.width));
+    // Keep the whole wave inside the frame (centred if it is taller than the frame).
+    widget.y = Math.round(newH <= CANVAS_H
+      ? Math.min(Math.max(cy - newH / 2, 0), CANVAS_H - newH)
+      : (CANVAS_H - newH) / 2);
+    const label = document.getElementById('widget-size-val');
+    if (label) label.textContent = `${newH}%`;
+    if (el.propPosX) { el.propPosX.value = widget.x; el.propPosY.value = widget.y; el.propSizeW.value = widget.width; }
+    if (el.propSizeH) el.propSizeH.value = widget.height;
+    interactionMgr?.updateSelectionBox();
+    callbacks.renderVideoFrame();
+    callbacks.debouncedSaveDraft();
+  });
+
   document.getElementById('toggle-widget-sync')?.addEventListener('change', (e) => {
     const widget = scene.getLayer('layer_player_widget') || scene.layers.find(ly => ly.type === 'audio_widget');
     if (!widget) return;

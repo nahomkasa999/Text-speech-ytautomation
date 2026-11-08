@@ -10,8 +10,10 @@
 const TAU = Math.PI * 2;
 
 function band(layer) {
-  const h = Math.max(40, Math.min(layer.height || 100, 220));
-  return { x: layer.x, y: layer.y, w: Math.max(60, layer.width), h, cy: layer.y + h / 2 };
+  // Any size: tiny accents up to full-screen waves (the canvas is 1080px tall).
+  const h = Math.max(16, Math.min(layer.height || 100, 2160));
+  // k scales strokes, bars, dots and glow with the size (1 = the default 100px).
+  return { x: layer.x, y: layer.y, w: Math.max(40, layer.width), h, cy: layer.y + h / 2, k: h / 100 };
 }
 
 /** Fades waves out towards both ends so they never stop abruptly. */
@@ -48,7 +50,7 @@ function drawOcean(ctx, b, t, color, thickness, energy) {
   const e = energy ?? 1;
   ctx.save();
   ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(b.x, b.y, b.w, b.h, 14) : ctx.rect(b.x, b.y, b.w, b.h);
+  ctx.roundRect ? ctx.roundRect(b.x, b.y, b.w, b.h, 14 * Math.min(b.k, 4)) : ctx.rect(b.x, b.y, b.w, b.h);
   ctx.clip();
   ctx.fillStyle = color;
   const layers = [
@@ -111,8 +113,8 @@ function drawRibbon(ctx, b, t, color, thickness, energy) {
 /** Pulse: rounded bars breathing in a travelling wave (looks like music, isn't tied to it). */
 function drawPulse(ctx, b, t, color, thickness, energy) {
   const e = energy ?? 1;
-  const gap = 6;
-  const barW = Math.max(4, Math.min(10, b.w / 90));
+  const barW = Math.max(3, Math.min(10 * b.k, b.w / 90));
+  const gap = barW * 0.7;
   const count = Math.floor(b.w / (barW + gap));
   const offset = b.x + (b.w - count * (barW + gap) + gap) / 2;
   ctx.fillStyle = color;
@@ -132,7 +134,7 @@ function drawPulse(ctx, b, t, color, thickness, energy) {
 /** Dot wave: a row of dots rising and falling like a stadium wave. */
 function drawDots(ctx, b, t, color, thickness, energy) {
   const e = energy ?? 1;
-  const spacing = Math.max(16, Math.min(28, b.w / 40));
+  const spacing = Math.max(10, Math.min(28 * b.k, b.w / 40));
   const count = Math.floor(b.w / spacing);
   const offset = b.x + (b.w - (count - 1) * spacing) / 2;
   ctx.fillStyle = color;
@@ -155,21 +157,22 @@ function drawBreathe(ctx, b, t, color, thickness, energy) {
   ctx.strokeStyle = color;
   ctx.lineCap = 'round';
   ctx.shadowColor = color;
-  ctx.shadowBlur = 8 + breath * 22;
+  ctx.shadowBlur = (8 + breath * 22) * b.k;
   strokeWave(ctx, b, { amp: b.h * 0.12 * (0.4 + breath * 0.6), freq: 1.0, speed: 0.9, phase: 0, t, width: thickness, alpha: 0.75 + breath * 0.25 });
 
   // A soft light gliding along the line with an ease-in-out back-and-forth motion.
   const u = 0.5 - 0.5 * Math.cos(t * 0.6);
   const px = b.x + 0.08 * b.w + u * b.w * 0.84;
   const py = b.cy + Math.sin(u * 1.0 * TAU + t * 0.9) * b.h * 0.12 * (0.4 + breath * 0.6) * edge(u);
-  const glow = ctx.createRadialGradient(px, py, 0, px, py, 26 + breath * 10);
+  const glowR = (26 + breath * 10) * b.k;
+  const glow = ctx.createRadialGradient(px, py, 0, px, py, glowR);
   glow.addColorStop(0, color);
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.shadowBlur = 0;
   ctx.globalAlpha = 0.9;
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(px, py, 26 + breath * 10, 0, TAU);
+  ctx.arc(px, py, glowR, 0, TAU);
   ctx.fill();
 }
 
@@ -194,6 +197,8 @@ export function drawAmbientWidget(ctx, layer, t, color, energy = null) {
   const fn = AMBIENT[layer.widgetStyle];
   if (!fn) return;
   ctx.save();
-  fn(ctx, band(layer), t, color, Math.max(1.5, layer.thickness || 3), energy);
+  const b = band(layer);
+  // Line thickness grows with the size so big waves don't look thin.
+  fn(ctx, b, t, color, Math.max(1.2, (layer.thickness || 3) * b.k), energy);
   ctx.restore();
 }
