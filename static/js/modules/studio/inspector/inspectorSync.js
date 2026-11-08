@@ -27,6 +27,9 @@ export function syncInspectorFromLayer(el, scene, interactionMgr) {
     el.customTextEditorGroup.classList.add('hidden');
   }
 
+  // The whole "Text style" section only applies to text layers.
+  document.getElementById('insp-text-style')?.classList.toggle('hidden', l.type === 'audio_widget');
+
   if (l.type === 'audio_widget') {
     el.typographySettingsGroup.classList.add('hidden');
     document.getElementById('alignment-settings-group')?.classList.add('hidden');

@@ -17,17 +17,8 @@ export function initPanelShortcuts(manager) {
       return;
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.altKey && e.code === 'KeyB') {
-      e.preventDefault();
-      manager.toggleRight();
-      return;
-    }
-
-    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyJ') {
-      e.preventDefault();
-      manager.toggleTimeline();
-      return;
-    }
+    // Ctrl+Alt+B (inspector) and Ctrl+J (timeline) were removed together with
+    // their toolbar toggles: those panels always stay visible now.
 
     if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || (e.shiftKey && e.code === 'KeyZ'))) {
       e.preventDefault();

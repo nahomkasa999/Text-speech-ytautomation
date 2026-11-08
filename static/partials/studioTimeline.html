@@ -29,46 +29,58 @@
       <span id="video-timecode" class="timeline-timecode">00:00.0 / 00:00.0</span>
     </div>
 
-    <!-- CapCut Audio Controls Deck (Volume & Custom Speed & BGM) -->
+    <!-- Audio & speed: compact buttons that open small popovers -->
     <div class="audio-controls-deck">
-      <!-- Voice Volume & Mute -->
-      <div class="deck-volume-wrap">
-        <button id="btn-audio-mute" class="transport-btn" style="width:26px; height:26px; padding:0; display:flex; align-items:center; justify-content:center;" title="Mute / Unmute Voice">
-          <svg id="svg-audio-vol" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-          </svg>
+      <button id="btn-audio-mute" class="transport-btn" title="Mute / unmute narration" aria-label="Mute narration">
+        <svg id="svg-audio-vol" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+      </button>
+
+      <div class="popover-anchor">
+        <button type="button" class="chip-btn" data-popover="audio-pop" title="Narration volume and background music">
+          <span>Audio</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
         </button>
-        <input type="range" id="audio-volume-slider" min="0" max="1" step="0.05" value="1" class="audio-slider volume-slider" title="Voice Volume: 100%" />
-        <span id="audio-volume-val" class="audio-val-label">100%</span>
+        <div id="audio-pop" class="popover popover-up popover-right pop-panel">
+          <div class="pop-label">Narration volume</div>
+          <div class="pop-row">
+            <input type="range" id="audio-volume-slider" min="0" max="1" step="0.05" value="1" class="audio-slider volume-slider" title="Voice Volume: 100%" />
+            <span id="audio-volume-val" class="audio-val-label">100%</span>
+          </div>
+          <div class="pop-label">Background music</div>
+          <div class="pop-row">
+            <button id="btn-add-bgm" class="btn btn-secondary btn-sm" title="Add background music">🎵 Add music…</button>
+            <input type="file" id="bgm-audio-uploader" accept="audio/*" hidden />
+            <button id="btn-bgm-mute" class="transport-btn" title="Mute / unmute music">🎵</button>
+          </div>
+          <div class="pop-row">
+            <input type="range" id="bgm-volume-slider" min="0" max="1" step="0.05" value="0.35" class="audio-slider volume-slider" title="Music Volume: 35%" />
+            <span id="bgm-volume-val" class="audio-val-label">35%</span>
+          </div>
+        </div>
       </div>
 
-      <div class="top-divider" style="height: 18px; margin: 0 4px;"></div>
-
-      <!-- Add Background Music (BGM) Controls -->
-      <div class="deck-volume-wrap">
-        <button id="btn-add-bgm" class="tool-btn" style="padding: 2px 8px; font-size: 11px; height: 26px;" title="Add Background Music">
-          <span>🎵 Music</span>
+      <div class="popover-anchor">
+        <button type="button" class="chip-btn" data-popover="speed-pop" title="Playback speed">
+          <span id="video-speed-val">1.00x</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
         </button>
-        <input type="file" id="bgm-audio-uploader" accept="audio/*" style="display: none;" />
-        <button id="btn-bgm-mute" class="transport-btn" style="width:26px; height:26px; padding:0; font-size: 11px;" title="Mute / Unmute Music">🎵</button>
-        <input type="range" id="bgm-volume-slider" min="0" max="1" step="0.05" value="0.35" class="audio-slider volume-slider" title="Music Volume: 35%" />
-        <span id="bgm-volume-val" class="audio-val-label">35%</span>
-      </div>
-
-      <div class="top-divider" style="height: 18px; margin: 0 4px;"></div>
-
-      <!-- Speed Controls -->
-      <div class="deck-speed-wrap">
-        <span class="speed-label">Speed:</span>
-        <input type="range" id="video-speed-slider" min="0.5" max="2.5" step="0.05" value="1.0" class="audio-slider speed-slider" title="Playback Speed" />
-        <span id="video-speed-val" class="speed-val-badge">1.00x</span>
-        <div class="speed-buttons">
-          <button class="speed-btn" data-speed="0.8">0.8x</button>
-          <button class="speed-btn active" data-speed="1.0">1.0x</button>
-          <button class="speed-btn" data-speed="1.2">1.2x</button>
-          <button class="speed-btn" data-speed="1.5">1.5x</button>
+        <div id="speed-pop" class="popover popover-up popover-right pop-panel">
+          <div class="pop-label">Speed</div>
+          <input type="range" id="video-speed-slider" min="0.5" max="2.5" step="0.05" value="1.0" class="audio-slider speed-slider" title="Playback Speed" />
+          <div class="speed-buttons">
+            <button class="speed-btn" data-speed="0.8">0.8x</button>
+            <button class="speed-btn active" data-speed="1.0">1.0x</button>
+            <button class="speed-btn" data-speed="1.2">1.2x</button>
+            <button class="speed-btn" data-speed="1.5">1.5x</button>
+          </div>
+          <label class="pop-check">
+            <input type="checkbox" id="check-pitch-correction" checked />
+            <span>Keep natural voice pitch</span>
+          </label>
         </div>
       </div>
     </div>

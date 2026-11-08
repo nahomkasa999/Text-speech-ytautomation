@@ -1,0 +1,295 @@
+/* =========================================================================
+   Calm layout: one menu, popovers instead of always-visible controls,
+   a Notion-style writing column, a collapsible icon-rail sidebar, and
+   sizing that fits 13" laptops (≈1280×650 usable). Loaded last.
+   ========================================================================= */
+
+/* ---------- Popovers & menus ---------- */
+.popover-anchor { position: relative; display: inline-flex; }
+
+.popover {
+  display: none;
+  position: fixed;          /* positioned by popover.js so panels never get clipped */
+  z-index: 2000;
+  min-width: 200px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+}
+.popover.open { display: block; animation: pop-in 0.12s ease-out; }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+.menu-popover { width: 260px; }
+.menu-label {
+  padding: 8px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+}
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--bg-hover); outline: none; }
+.menu-item > span:nth-child(2) { flex: 1; }
+.menu-icon {
+  width: 18px;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 12px;
+}
+.menu-item kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-disabled);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.menu-sep { height: 1px; margin: 6px 4px; background: var(--border-divider); }
+
+.menu-trigger-btn, .chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-trigger-btn:hover, .chip-btn:hover, .chip-btn[aria-expanded="true"], .menu-trigger-btn[aria-expanded="true"] {
+  background: var(--bg-hover);
+  border-color: var(--text-disabled);
+}
+.chip-btn { height: 26px; padding: 0 9px; font-weight: 500; }
+
+/* Small settings panels (audio / speed) */
+.pop-panel { width: 250px; padding: 12px; }
+.pop-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+  margin: 4px 0 6px;
+}
+.pop-label:not(:first-child) { margin-top: 12px; }
+.pop-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.pop-row .audio-slider { flex: 1; }
+.pop-panel .speed-slider { width: 100%; }
+.pop-panel .speed-buttons { display: flex; gap: 4px; margin-top: 8px; }
+.pop-panel .speed-btn { flex: 1; }
+.pop-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* ---------- Top bars ---------- */
+.workspace-header { gap: 12px; }
+.video-top-bar { flex-wrap: nowrap; }
+.video-top-bar .top-bar-left { min-width: 0; }
+.video-top-bar .top-bar-right { flex-shrink: 0; }   /* Export is never pushed off-screen */
+.export-btn { white-space: nowrap; }
+
+.narrator-header .title-input { font-size: 15px; max-width: none; }
+.header-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.meta-muted { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.details-popover { width: 230px; padding: 8px 12px; }
+.details-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-divider);
+}
+.details-row:last-child { border-bottom: none; }
+.details-row strong { color: var(--text-primary); font-weight: 600; font-family: var(--font-mono); }
+
+/* ---------- Notion-style centred writing column ---------- */
+.editor-container { padding: 28px 24px 12px; overflow: hidden; }
+.editor-column { width: 100%; max-width: 740px; margin: 0 auto; display: flex; height: 100%; }
+.editor-textarea {
+  font-size: 16px;
+  line-height: 1.8;
+  color: #E9E9E7;
+  padding: 0 4px;
+}
+.progress-card, .audio-deck {
+  width: calc(100% - 48px);
+  max-width: 740px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- Left sidebar: footer toggle + collapsed icon rail ---------- */
+.sidebar-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sidebar-footer .system-status { min-width: 0; }
+.sidebar-footer .status-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.left-sidebar .history-list { flex: 1; }
+
+.sidebar.left-sidebar.collapsed { display: flex !important; width: 56px !important; }
+.left-sidebar.collapsed .brand-name,
+.left-sidebar.collapsed .mode-tab span,
+.left-sidebar.collapsed .sidebar-subbar,
+.left-sidebar.collapsed .history-list,
+.left-sidebar.collapsed .status-text { display: none; }
+.left-sidebar.collapsed .sidebar-header { flex-direction: column; height: auto; padding: 12px 0; gap: 10px; }
+.left-sidebar.collapsed .mode-switcher-container { grid-template-columns: 1fr; padding: 8px; }
+.left-sidebar.collapsed .mode-tab { padding: 9px 0; }
+.left-sidebar.collapsed .sidebar-footer { margin-top: auto; flex-direction: column; padding: 12px 0; }
+.left-sidebar.collapsed .sidebar-collapse-btn svg { transform: scaleX(-1); }
+
+/* ---------- Engine picker: 2×2, everything inside the border ---------- */
+.engine-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 3px; gap: 3px; }
+.engine-tab {
+  height: 32px;
+  min-width: 0;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.engine-tab .tab-title { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Inspector: collapsible sections ---------- */
+.insp-section { border-top: 1px solid var(--border-divider); padding: 2px 0 6px; }
+.insp-section > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  user-select: none;
+}
+.insp-section > summary::-webkit-details-marker { display: none; }
+.insp-section > summary::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  margin-right: 4px;
+}
+.insp-section[open] > summary::after { transform: rotate(45deg); }
+.insp-section > summary:hover { color: var(--text-primary); }
+.insp-section.hidden { display: none !important; }
+
+/* ---------- Timeline toolbar ---------- */
+.timeline-toolbar { gap: 12px; }
+.transport-left { min-width: 0; }
+.timeline-timecode { white-space: nowrap; }
+.audio-controls-deck { gap: 6px; flex-shrink: 0; }
+
+/* ---------- Small laptops (13", ~1280×650 usable) ---------- */
+@media (max-width: 1440px) {
+  .sidebar-header { height: 48px; padding: 0 12px; }
+  .workspace-header { height: 48px; padding: 0 14px; }
+  .workspace-footer { height: 54px; padding: 0 14px; }
+  .settings-scroll-area { padding-left: 14px; padding-right: 14px; }
+}
+@media (max-height: 760px) {
+  .editor-container { padding-top: 18px; }
+  .audio-deck { padding: 10px 14px; margin-bottom: 10px; }
+  .workspace-footer { height: 52px; }
+  .timeline-toolbar { height: 34px; }
+}
+
+/* ---------- Polish found while testing at 1100–1280px ---------- */
+.mode-tab { white-space: nowrap; padding: 8px 6px; gap: 5px; }
+.num-prefix { width: auto; min-width: 0; margin-right: 8px; flex-shrink: 0; }
+.num-input-wrap .form-input-num, .num-input-wrap input { min-width: 0; flex: 1; }
+.deck-top { flex-wrap: wrap; gap: 10px; }
+.deck-meta { min-width: 0; flex: 1 1 200px; }
+.deck-meta h3 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deck-actions .btn { white-space: nowrap; }
+
+/* ---------- Synthesis engine: vertical dropdown ---------- */
+.engine-dropdown { display: flex; width: 100%; }
+.engine-trigger {
+  width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.engine-trigger:hover, .engine-trigger[aria-expanded="true"] { border-color: var(--accent-blue); }
+.engine-trigger-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.engine-trigger .tab-icon { color: var(--accent-blue); }
+.engine-chevron { color: var(--text-secondary); transition: transform 0.15s ease; }
+.engine-trigger[aria-expanded="true"] .engine-chevron { transform: rotate(180deg); }
+
+.engine-menu { padding: 5px; }
+.engine-menu .engine-tab {
+  height: auto;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  white-space: normal;
+  overflow: visible;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+.engine-menu .engine-tab + .engine-tab { margin-top: 2px; }
+.engine-menu .engine-tab .tab-icon { color: var(--text-secondary); flex-shrink: 0; }
+.engine-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.engine-text .tab-title { font-weight: 600; overflow: visible; }
+.engine-desc { font-size: 11px; color: var(--text-secondary); line-height: 1.35; }
+.engine-menu .engine-tab.active { background: rgba(13, 153, 255, 0.14); color: var(--text-primary); }
+.engine-menu .engine-tab.active .tab-icon { color: var(--accent-blue); }
+.engine-menu .engine-tab.active::after {
+  content: '✓';
+  margin-left: auto;
+  color: var(--accent-blue);
+  font-weight: 700;
+}

@@ -12,6 +12,24 @@ export class EngineSelector {
     this.onVoiceChanged = onVoiceChanged;
 
     this.attachEvents();
+    this.syncEngineDropdown();
+  }
+
+  /** Keeps the dropdown button showing the selected engine (also after a draft restore). */
+  syncEngineDropdown() {
+    const label = document.getElementById('engine-trigger-label');
+    const icon = document.getElementById('engine-trigger-icon');
+    if (!label) return;
+    const update = () => {
+      const active = [...this.el.engineTabs].find(t => t.classList.contains('active')) || this.el.engineTabs[0];
+      if (!active) return;
+      label.textContent = active.querySelector('.tab-title')?.textContent || active.dataset.engine;
+      if (icon) icon.innerHTML = active.querySelector('.tab-icon')?.innerHTML || '';
+      this.el.engineTabs.forEach(t => t.setAttribute('aria-selected', t === active ? 'true' : 'false'));
+    };
+    const observer = new MutationObserver(update);
+    this.el.engineTabs.forEach(t => observer.observe(t, { attributes: true, attributeFilter: ['class'] }));
+    update();
   }
 
   async initialize() {

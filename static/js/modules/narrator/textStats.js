@@ -11,9 +11,11 @@ export function updateTextStats(bookTextEl, speed, statWordsEl, statCharsEl, sta
 
   if (statWordsEl) statWordsEl.textContent = words.toLocaleString();
   if (statCharsEl) statCharsEl.textContent = chars.toLocaleString();
-  if (statTimeEl) {
-    statTimeEl.textContent = totalMinutes < 60
-      ? `~${totalMinutes}m`
-      : `~${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
-  }
+  const timeText = totalMinutes < 60
+    ? `~${totalMinutes}m`
+    : `~${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+  if (statTimeEl) statTimeEl.textContent = timeText;
+  // Compact copy shown in the header next to the Details button.
+  const inline = document.getElementById('stat-time-inline');
+  if (inline) inline.textContent = timeText;
 }

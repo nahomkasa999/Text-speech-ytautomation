@@ -11,9 +11,11 @@ import { createInitialLayers, createInitialState } from './modules/studio/studio
 import { createStudioSubsystem } from './modules/studio/studioInit.js';
 import { createNarratorSubsystem } from './modules/narrator/narratorInit.js';
 import { loadPartials } from './modules/ui/partialLoader.js';
+import { initPopovers } from './modules/ui/popover.js';
 
 async function setupApp() {
   await loadPartials();
+  initPopovers();
 
   const history = new HistoryManager();
   const scene = new Scene({ canvas: { width: 1920, height: 1080, background: '#C85A32' }, duration: 10 });

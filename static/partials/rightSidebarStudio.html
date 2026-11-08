@@ -5,17 +5,15 @@
   </div>
 
   <div class="settings-scroll-area">
-    <!-- Layer Selector List -->
+    <!-- Layers -->
     <div class="setting-group">
-      <label class="setting-label">Selected Layer</label>
+      <label class="setting-label">Layers</label>
       <div id="layers-list" class="layers-stack"></div>
       <button id="btn-inspector-restore-captions" class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 8px; display: none; align-items: center; justify-content: center; gap: 6px;" title="Restore missing or deleted captions">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
         <span>Restore Synced Captions</span>
       </button>
     </div>
-
-    <div class="divider"></div>
 
     <!-- Custom Text Editor (if custom text layer selected) -->
     <div id="custom-text-editor-group" class="setting-group hidden">
@@ -27,9 +25,10 @@
       </button>
     </div>
 
-    <!-- Figma Frame Coordinates (X, Y, Width, Height) -->
+    <!-- Position & size (rarely typed by hand: collapsed by default) -->
+    <details class="insp-section">
+      <summary>Position &amp; size</summary>
     <div class="setting-group">
-      <label class="setting-label">Frame Position & Size</label>
       <div class="figma-grid-2">
         <div class="num-input-wrap">
           <span class="num-prefix">X</span>
@@ -51,6 +50,11 @@
         </div>
       </div>
     </div>
+    </details>
+
+    <!-- Text style -->
+    <details class="insp-section" id="insp-text-style" open>
+      <summary>Text style</summary>
 
     <!-- Typography Settings -->
     <div class="setting-group" id="typography-settings-group">
@@ -70,7 +74,7 @@
           <input type="number" id="caption-size-num" class="form-input-num" min="16" max="140" value="54" />
         </div>
         <div class="num-input-wrap">
-          <span class="num-prefix">Color</span>
+          <span class="num-prefix">Colour</span>
           <input type="color" id="caption-color-picker" value="#111827" class="color-picker-input-bar" />
         </div>
       </div>
@@ -85,7 +89,7 @@
 
     <!-- Text Alignments -->
     <div class="setting-group" id="alignment-settings-group">
-      <label class="setting-label">Text Alignment (Horizontal / Vertical)</label>
+      <label class="setting-label">Alignment</label>
       <div class="figma-grid-2">
         <div class="segmented-control" id="align-control">
           <button class="segment-btn active" data-align="left" title="Align Left">
@@ -131,74 +135,66 @@
         <button class="segment-btn" data-weight="900">Black</button>
       </div>
     </div>
+    </details>
 
-    <div class="divider"></div>
-
-    <!-- Aesthetic Player Widget Toggle & Style Template Selector -->
+    <!-- Audio player bar / ambient animation -->
+    <details class="insp-section" open>
+      <summary>Audio player animation</summary>
     <div class="setting-group" id="player-widget-section">
       <div class="checkbox-row">
         <input type="checkbox" id="toggle-player-widget" checked class="form-checkbox" />
-        <label for="toggle-player-widget" class="checkbox-label">Aesthetic Audio Bar Widget</label>
+        <label for="toggle-player-widget" class="checkbox-label">Show on video</label>
       </div>
 
       <div id="audio-widget-templates-group" style="margin-top: 10px;">
-        <label class="setting-label">Audio Bar Style Template</label>
+        <label class="setting-label">Always moving (ignores the voice)</label>
         <div class="widget-template-grid" id="widget-template-picker">
+          <button class="widget-tmpl-btn" data-style="ambient_flow" title="Soft flowing sine waves">
+            <span class="tmpl-icon">∿∿∿</span><span class="tmpl-label">Flow</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="ambient_ocean" title="Layered ocean waves">
+            <span class="tmpl-icon">≈≈≈</span><span class="tmpl-label">Ocean</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="ambient_ribbon" title="Twisting silk ribbon">
+            <span class="tmpl-icon">⌇⌇⌇</span><span class="tmpl-label">Ribbon</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="ambient_pulse" title="Breathing wave bars">
+            <span class="tmpl-icon">▂▅▇▅▂</span><span class="tmpl-label">Pulse</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="ambient_dots" title="Rolling wave of dots">
+            <span class="tmpl-icon">·•●•·</span><span class="tmpl-label">Dot wave</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="ambient_glow" title="Breathing glow line">
+            <span class="tmpl-icon">─◉─</span><span class="tmpl-label">Breathe</span>
+          </button>
+        </div>
+
+        <label class="setting-label" style="margin-top: 12px;">Progress bar (follows the narration)</label>
+        <div class="widget-template-grid">
           <button class="widget-tmpl-btn active" data-style="classic" title="Classic Progress Line">
-            <span class="tmpl-icon">—●—</span>
-            <span class="tmpl-label">Classic</span>
+            <span class="tmpl-icon">—●—</span><span class="tmpl-label">Classic</span>
           </button>
           <button class="widget-tmpl-btn" data-style="waveform" title="Aesthetic Sound Waves">
-            <span class="tmpl-icon">ılılı</span>
-            <span class="tmpl-label">Waves</span>
+            <span class="tmpl-icon">ılılı</span><span class="tmpl-label">Waves</span>
           </button>
           <button class="widget-tmpl-btn" data-style="capsule" title="Floating Capsule Player">
-            <span class="tmpl-icon">◖▶—◗</span>
-            <span class="tmpl-label">Capsule</span>
+            <span class="tmpl-icon">◖▶—◗</span><span class="tmpl-label">Capsule</span>
           </button>
           <button class="widget-tmpl-btn" data-style="glow_line" title="Cyber Glow Line">
-            <span class="tmpl-icon">━●━</span>
-            <span class="tmpl-label">Glow</span>
+            <span class="tmpl-icon">━●━</span><span class="tmpl-label">Glow</span>
           </button>
           <button class="widget-tmpl-btn" data-style="minimal_dots" title="Segmented Dots">
-            <span class="tmpl-icon">•••••</span>
-            <span class="tmpl-label">Dots</span>
+            <span class="tmpl-icon">•••••</span><span class="tmpl-label">Dots</span>
           </button>
           <button class="widget-tmpl-btn" data-style="equalizer" title="Graphic Spectrum Equalizer">
-            <span class="tmpl-icon">▅█▃▆</span>
-            <span class="tmpl-label">Equalizer</span>
+            <span class="tmpl-icon">▅█▃▆</span><span class="tmpl-label">Equalizer</span>
           </button>
           <button class="widget-tmpl-btn" data-style="gradient_pill" title="Modern Gradient Pill">
-            <span class="tmpl-icon">▬▬●▬</span>
-            <span class="tmpl-label">Modern</span>
+            <span class="tmpl-icon">▬▬●▬</span><span class="tmpl-label">Modern</span>
           </button>
         </div>
       </div>
     </div>
-
-    <div class="divider"></div>
-
-    <!-- Audio Track Properties (CapCut Inspector) -->
-    <div id="inspector-audio-group" class="setting-group">
-      <label class="setting-label">Audio Track Properties</label>
-      <div class="sub-slider-item">
-        <div class="sub-slider-header">
-          <span>Speed</span>
-          <span id="inspector-speed-val" class="slider-val">1.00x</span>
-        </div>
-        <input type="range" id="inspector-speed-slider" min="0.5" max="2.5" step="0.05" value="1.0" class="form-range" />
-      </div>
-      <div class="sub-slider-item" style="margin-top: 8px;">
-        <div class="sub-slider-header">
-          <span>Volume</span>
-          <span id="inspector-volume-val" class="slider-val">100%</span>
-        </div>
-        <input type="range" id="inspector-volume-slider" min="0" max="1" step="0.05" value="1.0" class="form-range" />
-      </div>
-      <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
-        <label class="setting-label" style="margin: 0; cursor: pointer;" for="check-pitch-correction">Preserve Pitch</label>
-        <input type="checkbox" id="check-pitch-correction" checked style="cursor: pointer;" />
-      </div>
-    </div>
+    </details>
   </div>
 </div>

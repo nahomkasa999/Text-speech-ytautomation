@@ -13,12 +13,19 @@ export class PanelManager {
     this.onResizeCanvas = onResizeCanvas;
 
     const saved = this.loadLayout();
-    this.leftWidth = saved.leftWidth || 270;
-    this.rightWidth = saved.rightWidth || 320;
-    this.timelineHeight = saved.timelineHeight || 220;
+    // Smaller panels on laptop screens so the canvas, timeline and Export button fit.
+    const small = window.innerWidth < 1500;
+    const short = window.innerHeight < 800;
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    this.leftWidth = clamp(saved.leftWidth || (small ? 224 : 256), 200, small ? 250 : 380);
+    this.rightWidth = clamp(saved.rightWidth || (small ? 280 : 310), 250, small ? 310 : 440);
+    this.timelineHeight = clamp(saved.timelineHeight || (short ? 186 : 210), 140, short ? 200 : 320);
     this.leftCollapsed = !!saved.leftCollapsed;
-    this.rightCollapsed = !!saved.rightCollapsed;
-    this.timelineCollapsed = !!saved.timelineCollapsed;
+    // Only the left sidebar can be collapsed now (its toggle sits in the sidebar
+    // footer). Always show the inspector and timeline, even if an older version
+    // saved them as hidden, since they no longer have toggle buttons.
+    this.rightCollapsed = false;
+    this.timelineCollapsed = false;
     this.isZenMode = false;
 
     createPanelResizers(this);
@@ -75,6 +82,12 @@ export class PanelManager {
   }
 
   _updateToggleButtons() {
+    const sidebarBtn = document.getElementById('btn-toggle-sidebar');
+    if (sidebarBtn) {
+      const label = this.leftCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)';
+      sidebarBtn.title = label;
+      sidebarBtn.setAttribute('aria-label', label);
+    }
     const toggles = [
       { id: 'btn-toggle-left-panel', active: !this.leftCollapsed },
       { id: 'btn-toggle-left-narrator', active: !this.leftCollapsed },

@@ -87,7 +87,7 @@ export class SessionsManager {
     this.el.videoAudioPlayer.currentTime = 0;
     this.el.btnDownloadAudio.href = sess.audio_url;
     this.el.btnDownloadAudio.setAttribute('download', `${sess.title.replace(/[^a-z0-9_-]/gi, '_')}.wav`);
-    this.el.videoProjectName.textContent = sess.title;
+    if (this.el.videoProjectName) this.el.videoProjectName.textContent = sess.title;
 
     if (sess.bg_image && sess.bg_image !== this.state.video.bgImageUrl) {
       this.callbacks.loadBackgroundTemplate(sess.bg_image, false);

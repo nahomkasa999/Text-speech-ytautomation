@@ -3,6 +3,8 @@
  */
 
 export function setupTopBarToggles({ el, panelMgr, playback, modeSwitcher }) {
+  // Single sidebar toggle, at the bottom of the left sidebar.
+  document.getElementById('btn-toggle-sidebar')?.addEventListener('click', () => panelMgr.toggleLeft());
   if (el.btnToggleLeftNarrator) el.btnToggleLeftNarrator.addEventListener('click', () => panelMgr.toggleLeft());
   if (el.btnToggleRightNarrator) el.btnToggleRightNarrator.addEventListener('click', () => panelMgr.toggleRight());
   if (el.btnToggleLeftPanel) el.btnToggleLeftPanel.addEventListener('click', () => panelMgr.toggleLeft());

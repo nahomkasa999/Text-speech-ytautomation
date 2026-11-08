@@ -65,7 +65,7 @@ export function setupTextEditor({ el, state, scene, callbacks }) {
     scene.syncedSegments = [];
     scene.duration = 10;
     el.videoAudioPlayer.src = '';
-    el.videoProjectName.textContent = 'Untitled Project';
+    if (el.videoProjectName) el.videoProjectName.textContent = 'Untitled Project';
 
     callbacks.renderLayersList();
     callbacks.selectLayer('layer_captions');

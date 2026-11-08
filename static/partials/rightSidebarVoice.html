@@ -8,23 +8,31 @@
     <!-- Engine Selector Tabs -->
     <div class="setting-group">
       <label class="setting-label">Synthesis Engine</label>
-      <div class="engine-tabs">
-        <button class="engine-tab active" data-engine="local">
-          <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
-          <span class="tab-title">Local (Kokoro)</span>
+      <!-- Vertical dropdown: the rows are the .engine-tab buttons the engine logic already listens to -->
+      <div class="popover-anchor engine-dropdown">
+        <button type="button" id="engine-dropdown-trigger" class="engine-trigger" data-popover="engine-menu" aria-haspopup="listbox">
+          <span id="engine-trigger-icon" class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+          <span id="engine-trigger-label" class="engine-trigger-label">Local (Kokoro)</span>
+          <svg class="engine-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
-        <button class="engine-tab" data-engine="voice_design" title="Gemini voices: 30 prebuilt voices + your own designed voices">
-          <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg></span>
-          <span class="tab-title">Gemini</span>
-        </button>
-        <button class="engine-tab" data-engine="deployed">
-          <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span>
-          <span class="tab-title">Deployed (RunPod)</span>
-        </button>
-        <button class="engine-tab" data-engine="cloud_api">
-          <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-6 6 2-2m-3-1 1.5-1.5M19 10l1.5-1.5M9 21a6 6 0 1 1 0-12 5.97 5.97 0 0 1 4.5 2.05L22 2l-2 2"/></svg></span>
-          <span class="tab-title">Cloud API</span>
-        </button>
+        <div id="engine-menu" class="popover engine-menu match-width" role="listbox">
+          <button type="button" class="engine-tab menu-item active" data-engine="local" role="option">
+            <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+            <span class="engine-text"><span class="tab-title">Local (Kokoro)</span><span class="engine-desc">Free &amp; offline, runs on this computer</span></span>
+          </button>
+          <button type="button" class="engine-tab menu-item" data-engine="voice_design" role="option">
+            <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg></span>
+            <span class="engine-text"><span class="tab-title">Gemini</span><span class="engine-desc">30 voices + your own designed voices (API key)</span></span>
+          </button>
+          <button type="button" class="engine-tab menu-item" data-engine="deployed" role="option">
+            <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span>
+            <span class="engine-text"><span class="tab-title">Deployed (RunPod)</span><span class="engine-desc">Your own GPU endpoint</span></span>
+          </button>
+          <button type="button" class="engine-tab menu-item" data-engine="cloud_api" role="option">
+            <span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 2-2 2m-6 6 2-2m-3-1 1.5-1.5M19 10l1.5-1.5M9 21a6 6 0 1 1 0-12 5.97 5.97 0 0 1 4.5 2.05L22 2l-2 2"/></svg></span>
+            <span class="engine-text"><span class="tab-title">Cloud API</span><span class="engine-desc">OpenAI, ElevenLabs or BreezeBlue (API key)</span></span>
+          </button>
+        </div>
       </div>
     </div>
 
