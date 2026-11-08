@@ -9,6 +9,7 @@ import {
   drawEqualizerWidget,
   drawGradientPillWidget
 } from './widgetTemplates.js';
+import { drawAmbientWidget, isAmbientStyle } from './ambientWidgets.js';
 
 export function drawAudioWidgetLayer(ctx, layer, scene, currentTime) {
   const duration = scene.duration || 10;
@@ -17,6 +18,15 @@ export function drawAudioWidgetLayer(ctx, layer, scene, currentTime) {
   const style = layer.widgetStyle || 'classic';
 
   ctx.save();
+  if (isAmbientStyle(style)) {
+    // Always-moving animations ignore the narration progress. While the editor
+    // is paused, scene.ambientClock keeps them moving; on export/playback the
+    // video time drives them so the result is deterministic.
+    const t = typeof scene.ambientClock === 'number' ? scene.ambientClock : currentTime;
+    drawAmbientWidget(ctx, layer, t, color);
+    ctx.restore();
+    return;
+  }
   switch (style) {
     case 'waveform': drawWaveformWidget(ctx, layer, progress, color); break;
     case 'capsule': drawCapsuleWidget(ctx, layer, progress, color, currentTime, duration); break;

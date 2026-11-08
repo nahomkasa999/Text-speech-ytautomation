@@ -3,6 +3,7 @@
  */
 
 import { CanvasInteractionManager } from '../../video/interaction.js';
+import { startAmbientPreview } from './playback/ambientPreview.js';
 import { PanelManager } from '../../video/panels.js';
 import { LayersPanel } from './layersPanel.js';
 import { syncInspectorFromLayer } from './inspector/inspectorSync.js';
@@ -81,6 +82,7 @@ export function createStudioSubsystem({ el, state, scene, history, canvasCtx, ge
   };
 
   const syncInspector = () => syncInspectorFromLayer(el, scene, interactionMgr);
+  startAmbientPreview({ el, state, scene, renderVideoFrame });
 
   const interactionMgr = new CanvasInteractionManager({
     stageEl: el.videoStageContainer || document.getElementById('video-stage-container'),

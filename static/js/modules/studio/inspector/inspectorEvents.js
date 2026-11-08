@@ -156,7 +156,7 @@ function setupTypographyEvents(el, scene, canvasCtx, interactionMgr, callbacks) 
   });
 }
 
-function setupWidgetAndColorEvents(el, scene, callbacks) {
+function setupWidgetAndColorEvents(el, scene, interactionMgr, callbacks) {
   const getSelected = () => scene.getSelectedLayer();
 
   el.captionColorPicker.addEventListener('input', (e) => {
@@ -187,9 +187,14 @@ function setupWidgetAndColorEvents(el, scene, callbacks) {
         el.widgetTmplBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         widget.widgetStyle = btn.dataset.style;
+        // Ambient animations draw in a band of the layer's height; the default
+        // layer height (200px) is too tall, so start them at a calmer 100px.
+        if (btn.dataset.style.startsWith('ambient_') && (!widget.height || widget.height >= 200)) {
+          widget.height = 100;
+        }
+        interactionMgr?.updateSelectionBox();
         callbacks.renderVideoFrame();
         callbacks.debouncedSaveDraft();
-        showToast(`Widget template: ${btn.dataset.style}`, 'info');
       }
     });
   });
@@ -207,5 +212,5 @@ function setupWidgetAndColorEvents(el, scene, callbacks) {
 export function setupInspectorEvents({ el, scene, canvasCtx, interactionMgr, callbacks }) {
   setupLayerTransformEvents(el, scene, canvasCtx, interactionMgr, callbacks);
   setupTypographyEvents(el, scene, canvasCtx, interactionMgr, callbacks);
-  setupWidgetAndColorEvents(el, scene, callbacks);
+  setupWidgetAndColorEvents(el, scene, interactionMgr, callbacks);
 }
