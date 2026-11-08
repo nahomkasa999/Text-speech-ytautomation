@@ -3,6 +3,7 @@
  */
 
 import { fetchSessionsApi, deleteSessionApi } from '../services/api.js';
+import { loadVoiceEnvelope } from '../studio/playback/voiceEnvelope.js';
 import { formatDuration } from '../ui/timeFormat.js';
 import { showToast } from '../ui/toast.js';
 import { TranscriptionLayer, AudioWidgetLayer, createLayerFromData } from '../../video/scene.js';
@@ -71,7 +72,8 @@ export class SessionsManager {
     });
   }
 
-  selectSession(sess) {
+  /** @param {{keepLayers?: boolean}} [opts] keepLayers: keep the layers already in the scene (restored draft) */
+  selectSession(sess, opts = {}) {
     this.state.activeSession = sess;
     this.el.projectTitle.value = sess.title;
     this.el.bookText.value = sess.text;
@@ -85,6 +87,8 @@ export class SessionsManager {
     this.el.mainAudioPlayer.load();
     this.el.videoAudioPlayer.src = sess.audio_url;
     this.el.videoAudioPlayer.currentTime = 0;
+    // Loudness curve for "Move with the voice" wave animations.
+    loadVoiceEnvelope(this.scene, sess.audio_url).then(() => this.callbacks.renderVideoFrame?.());
     this.el.btnDownloadAudio.href = sess.audio_url;
     this.el.btnDownloadAudio.setAttribute('download', `${sess.title.replace(/[^a-z0-9_-]/gi, '_')}.wav`);
     if (this.el.videoProjectName) this.el.videoProjectName.textContent = sess.title;
@@ -93,7 +97,7 @@ export class SessionsManager {
       this.callbacks.loadBackgroundTemplate(sess.bg_image, false);
     }
 
-    this._setupSessionLayers(sess);
+    this._setupSessionLayers(sess, !!opts.keepLayers);
     this._setupSessionSegments(sess);
 
     this.renderHistoryList();
@@ -104,7 +108,7 @@ export class SessionsManager {
     this.callbacks.updatePlayheadPosition(0, sess.duration_seconds || 10);
   }
 
-  _setupSessionLayers(sess) {
+  _setupSessionLayers(sess, keepLayers = false) {
     const capLayer = new TranscriptionLayer({
       id: 'layer_captions',
       name: 'Synced Captions',
@@ -124,8 +128,20 @@ export class SessionsManager {
       this.scene.layers.forEach(l => {
         if (l.endTime === 10 || typeof l.endTime !== 'number') l.endTime = 999999;
       });
+    } else if (keepLayers && this.scene.layers.length > 0) {
+      // Startup: keep the layers restored from the saved draft (caption style,
+      // positions, wave animation, added text/images) instead of resetting them.
+      if (!this.scene.getLayer('layer_captions')) this.scene.addLayer(capLayer);
+      if (!this.scene.getLayer('layer_player_widget')) this.scene.addLayer(playerWidget);
     } else {
-      this.scene.layers = [capLayer, playerWidget];
+      // Switching books: start clean, but keep the caption and wave styling the
+      // user chose so every video keeps the same look.
+      const oldCap = this.scene.getLayer('layer_captions');
+      const oldWidget = this.scene.getLayer('layer_player_widget');
+      this.scene.layers = [
+        oldCap ? createLayerFromData({ ...oldCap.toJSON(), text: capLayer.text }) : capLayer,
+        oldWidget ? createLayerFromData(oldWidget.toJSON()) : playerWidget
+      ].filter(Boolean);
     }
   }
 

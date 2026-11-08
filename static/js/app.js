@@ -53,7 +53,8 @@ async function bootstrapData({ narrator, studio, state }) {
   await narrator.draftService.restoreDraft();
   await narrator.sessionsManager.loadSessions();
   if (state.sessions.length > 0 && !state.activeSession) {
-    narrator.sessionsManager.selectSession(state.sessions[0]);
+    // keepLayers: don't wipe the layers just restored from the saved draft.
+    narrator.sessionsManager.selectSession(state.sessions[0], { keepLayers: true });
   }
   studio.initVideoStudio();
   narrator.refreshStats();
