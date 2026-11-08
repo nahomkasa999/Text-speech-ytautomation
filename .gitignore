@@ -26,3 +26,4 @@ outputs/draft.json
 .vscode/
 .idea/
 outputs/webview_storage/
+outputs/tmp/

@@ -98,13 +98,22 @@ def _wait_for_server(port: int, server_thread: threading.Thread) -> bool:
 def _open_window(url: str, storage_dir: str) -> None:
     try:
         import webview
-        webview.create_window(
+        from src.desktop_api import DesktopApi
+
+        # The embedded browser blocks downloads by default. Allow them, and give the
+        # UI a native "Save As..." dialog (window.pywebview.api.save_as).
+        webview.settings["ALLOW_DOWNLOADS"] = True
+        api = DesktopApi()
+        window = webview.create_window(
             title=APP_TITLE,
             url=url,
+            js_api=api,
             width=1280,
-            height=860,
-            min_size=(900, 600)
+            height=800,
+            min_size=(900, 600),
+            maximized=True,  # small laptops: never start larger than the screen
         )
+        api.set_window(window)
         # Persist localStorage/cookies between launches (pywebview defaults to private
         # mode, which wipes storage on every restart and loses UI state like backgrounds)
         os.makedirs(storage_dir, exist_ok=True)

@@ -52,7 +52,7 @@ export function runRealtimeExport({
       const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
       const filename = `${getExportFilename()}.${ext}`;
       downloadBlob(new Blob(chunks, { type: mimeType }), filename);
-      showToast(`Video exported as ${filename}!`, 'success');
+      showToast('Video rendered. Choose where to save it.', 'success');
       resolve();
     };
 

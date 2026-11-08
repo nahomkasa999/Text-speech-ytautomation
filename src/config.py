@@ -54,3 +54,12 @@ else:
 
 os.makedirs(IMAGES_DIR, exist_ok=True)
 os.makedirs(AUDIO_DIR, exist_ok=True)
+
+# Scratch space for the desktop "Save As..." flow; cleared on every start.
+TEMP_DIR = os.path.join(APP_DATA_DIR, "outputs", "tmp")
+os.makedirs(TEMP_DIR, exist_ok=True)
+for _name in os.listdir(TEMP_DIR):
+    try:
+        os.remove(os.path.join(TEMP_DIR, _name))
+    except OSError:
+        pass

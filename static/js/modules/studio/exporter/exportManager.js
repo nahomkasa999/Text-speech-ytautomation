@@ -3,6 +3,7 @@
  */
 
 import { exportVideoFast, isFastExportSupported, ExportCancelledError } from '../../../video/exporter.js';
+import { saveBlob } from '../../services/fileSaver.js';
 import { runRealtimeExport } from './realtimeRecorder.js';
 import { ExportOptionsModal } from './exportOptionsModal.js';
 import { showToast } from '../../ui/toast.js';
@@ -26,12 +27,8 @@ export class ExportManager {
   }
 
   downloadBlob(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    // Native "Save As..." dialog in the desktop app; normal download in a browser.
+    return saveBlob(blob, filename);
   }
 
   preloadSceneImages() {
@@ -79,7 +76,7 @@ export class ExportManager {
     this.downloadBlob(blob, filename);
     const secs = ((performance.now() - startedAt) / 1000).toFixed(1);
     console.info(`[Export] ${filename} (${codecs}, ${(blob.size / 1e6).toFixed(1)} MB) in ${secs}s`);
-    showToast(`Video exported as ${filename} in ${secs}s!`, 'success');
+    showToast(`Video rendered in ${secs}s. Choose where to save it.`, 'success');
   }
 
   finishUI() {

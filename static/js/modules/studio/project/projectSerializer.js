@@ -3,6 +3,7 @@
  */
 
 import { showToast } from '../../ui/toast.js';
+import { saveBlob } from '../../services/fileSaver.js';
 
 export class ProjectSerializer {
   constructor({ scene, el, state, callbacks }) {
@@ -54,13 +55,7 @@ export class ProjectSerializer {
     const data = this.serialize();
     const jsonStr = JSON.stringify(data, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${data.title.replace(/[^a-z0-9_-]/gi, '_')}.videoproj`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-    showToast('Project file downloaded!', 'success');
+    saveBlob(blob, `${data.title.replace(/[^a-z0-9_-]/gi, '_')}.videoproj`);
   }
 
   async loadProjectFromFile(file) {
