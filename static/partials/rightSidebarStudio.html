@@ -162,6 +162,39 @@
         <input type="range" id="widget-size-slider" min="20" max="1000" step="5" value="100" class="form-range" title="Make the waves smaller or larger (you can also drag the corner handles)" />
       </div>
 
+      <!-- Colours: any colour; layer colours matched automatically or set by hand -->
+      <div class="wave-colors" style="margin-top: 14px;">
+        <label class="setting-label" for="wave-color-picker">Colour</label>
+        <div class="wave-color-row">
+          <input type="color" id="wave-color-picker" class="wave-color-input" value="#111827" title="Pick any colour" />
+          <div class="color-presets wave-presets">
+            <button class="color-preset-btn" data-wave-color="#E8B64C" style="background:#E8B64C;" title="Gold"></button>
+            <button class="color-preset-btn" data-wave-color="#FFFFFF" style="background:#FFFFFF;" title="White"></button>
+            <button class="color-preset-btn" data-wave-color="#FEF3C7" style="background:#FEF3C7;" title="Cream"></button>
+            <button class="color-preset-btn" data-wave-color="#111827" style="background:#111827;" title="Black"></button>
+            <button class="color-preset-btn" data-wave-color="#38BDF8" style="background:#38BDF8;" title="Sky blue"></button>
+            <button class="color-preset-btn" data-wave-color="#F472B6" style="background:#F472B6;" title="Pink"></button>
+          </div>
+        </div>
+        <div class="checkbox-row" style="margin-top: 10px;">
+          <input type="checkbox" id="wave-auto-colors" class="form-checkbox" checked />
+          <label for="wave-auto-colors" class="checkbox-label">Match layer colours automatically</label>
+        </div>
+        <div class="wave-layers-head">
+          <span class="setting-label" style="margin: 0;">Layer colours</span>
+          <span id="wave-layers-hint" class="wave-layers-hint">from the main colour</span>
+        </div>
+        <div id="wave-layer-colors" class="wave-layer-row"></div>
+
+        <div class="sub-slider-item" style="margin-top: 12px;">
+          <div class="sub-slider-header">
+            <span>Glow</span>
+            <span id="wave-glow-val" class="slider-val">0%</span>
+          </div>
+          <input type="range" id="wave-glow-slider" min="0" max="100" step="5" value="0" class="form-range" />
+        </div>
+      </div>
+
       <div id="audio-widget-templates-group" style="margin-top: 12px;">
         <label class="setting-label">Animation style</label>
         <div class="widget-template-grid" id="widget-template-picker">
@@ -182,6 +215,9 @@
           </button>
           <button class="widget-tmpl-btn" data-style="ambient_glow" title="Breathing glow line">
             <span class="tmpl-icon">─◉─</span><span class="tmpl-label">Breathe</span>
+          </button>
+          <button class="widget-tmpl-btn" data-style="ambient_shimmer" title="Glowing thin bars, like a gold audio waveform">
+            <span class="tmpl-icon">ı|ı|ı</span><span class="tmpl-label">Gold glow</span>
           </button>
         </div>
       </div>

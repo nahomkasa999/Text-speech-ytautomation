@@ -3,6 +3,7 @@
  */
 
 import { measureTextLayout } from '../../../video/renderer.js';
+import { setupWaveColorControls, syncWaveColorControls } from './waveColors.js';
 import { showToast } from '../../ui/toast.js';
 
 function setupLayerTransformEvents(el, scene, canvasCtx, interactionMgr, callbacks) {
@@ -187,6 +188,14 @@ function setupWidgetAndColorEvents(el, scene, interactionMgr, callbacks) {
         el.widgetTmplBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         widget.widgetStyle = btn.dataset.style;
+        // First time picking "Gold glow" on the default dark colour: start with
+        // the gold + glow look from the reference clip.
+        if (btn.dataset.style === 'ambient_shimmer' && (!widget.color || widget.color.toLowerCase() === '#111827')) {
+          widget.color = '#E8B64C';
+          widget.autoPalette = true;
+          if (!widget.glow) widget.glow = 0.6;
+        }
+        syncWaveColorControls(scene);
         // Ambient animations draw in a band of the layer's height; the default
         // layer height (200px) is too tall, so start them at a calmer 100px.
         if (btn.dataset.style.startsWith('ambient_') && (!widget.height || widget.height >= 200)) {
@@ -251,4 +260,5 @@ export function setupInspectorEvents({ el, scene, canvasCtx, interactionMgr, cal
   setupLayerTransformEvents(el, scene, canvasCtx, interactionMgr, callbacks);
   setupTypographyEvents(el, scene, canvasCtx, interactionMgr, callbacks);
   setupWidgetAndColorEvents(el, scene, interactionMgr, callbacks);
+  setupWaveColorControls({ scene, callbacks });
 }

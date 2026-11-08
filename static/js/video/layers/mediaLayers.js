@@ -69,6 +69,11 @@ export class AudioWidgetLayer extends Layer {
     if (legacy && (typeof data.height !== 'number' || data.height >= 200)) this.height = 100;
     // "Move with the voice": waves follow the narration loudness when true.
     this.syncToVoice = !!data.syncToVoice;
+    // Colours: one main colour (this.color); the 2-3 layer colours are matched
+    // automatically unless autoPalette is false, then palette[i] is used.
+    this.autoPalette = data.autoPalette !== false;
+    this.palette = Array.isArray(data.palette) ? data.palette.slice(0, 5) : [];
+    this.glow = typeof data.glow === 'number' ? data.glow : 0;
     // Width at 100% on the Size slider (kept so scaling back down restores the shape).
     this.baseWidth = typeof data.baseWidth === 'number' ? data.baseWidth : undefined;
     this.color = data.color || '#111827';
@@ -83,6 +88,9 @@ export class AudioWidgetLayer extends Layer {
       type: 'audio_widget',
       widgetStyle: this.widgetStyle,
       syncToVoice: this.syncToVoice,
+      autoPalette: this.autoPalette,
+      palette: this.palette,
+      glow: this.glow,
       baseWidth: this.baseWidth,
       color: this.color,
       thickness: this.thickness,

@@ -1,3 +1,4 @@
+import { syncWaveColorControls } from './waveColors.js';
 /**
  * Inspector Synchronizer: updates UI input values to reflect the active layer.
  */
@@ -38,6 +39,7 @@ export function syncInspectorFromLayer(el, scene, interactionMgr) {
     el.togglePlayerWidget.checked = l.visible;
 
     const curStyle = l.widgetStyle || 'ambient_flow';
+    syncWaveColorControls(scene);
     const syncBox = document.getElementById('toggle-widget-sync');
     if (syncBox) syncBox.checked = !!l.syncToVoice;
     // Size % = wave height relative to the default 100px.
