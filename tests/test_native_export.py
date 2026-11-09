@@ -185,26 +185,40 @@ def test_wrong_sized_frame_and_duplicate(manager, tmp_path):
         manager.frame(token, 0, 1, bytes(64 * 48 * 4))
 
 
-def test_recovery_removes_only_dead_owner_scratch(tmp_path, monkeypatch):
+def test_recovery_removes_only_unclaimed_scratch(tmp_path):
     journal = tmp_path / 'journal'
     journal.mkdir()
     target = tmp_path / 'saved.mp4'
     target.write_bytes(b'finished video')
     dead_token, alive_token = 'a' * 32, 'b' * 32
-    for token, pid in [(dead_token, 123), (alive_token, 456)]:
-        (journal / f'{token}.json').write_text(json.dumps({'pid': pid, 'target': str(target)}))
+    for token in (dead_token, alive_token):
+        (journal / f'{token}.json').write_text(json.dumps({'target': str(target)}))
         for suffix in ('partial', 'music'):
             (tmp_path / f'.saved.mp4.{token}.{suffix}').write_bytes(b'scratch')
-    monkeypatch.setattr(native, '_process_alive', lambda pid: pid == 456)
-    manager = native.ExportManager(journal_dir=journal)
-    try:
-        assert target.read_bytes() == b'finished video'
-        assert not (tmp_path / f'.saved.mp4.{dead_token}.partial').exists()
-        assert not (tmp_path / f'.saved.mp4.{dead_token}.music').exists()
-        assert (tmp_path / f'.saved.mp4.{alive_token}.partial').exists()
-        assert (journal / f'{alive_token}.json').exists()
-    finally:
-        manager.shutdown()
+    with (journal / f'{alive_token}.json').open('r+b') as owner:
+        assert native._lock(owner)
+        manager = native.ExportManager(journal_dir=journal)
+        try:
+            assert target.read_bytes() == b'finished video'
+            assert not (tmp_path / f'.saved.mp4.{dead_token}.partial').exists()
+            assert not (tmp_path / f'.saved.mp4.{dead_token}.music').exists()
+            assert not (journal / f'{dead_token}.json').exists()
+            assert (tmp_path / f'.saved.mp4.{alive_token}.partial').exists()
+            assert (journal / f'{alive_token}.json').exists()
+        finally:
+            manager.shutdown()
+
+
+def test_second_manager_keeps_running_export(manager, tmp_path):
+    info = manager.prepare(tmp_path / 'live.mp4', settings())
+    manager.start(info['id'])
+    manager.frame(info['id'], 0, 10, bytes(64 * 48 * 4))
+    in_progress = sorted(tmp_path.rglob('*'))
+    native.ExportManager(journal_dir=manager.journal_dir).shutdown()
+    assert sorted(tmp_path.rglob('*')) == in_progress
+    manager.frame(info['id'], 10, 10, bytes(64 * 48 * 4))
+    assert Path(manager.finish(info['id'])['path']).stat().st_size
+    assert not list(manager.journal_dir.iterdir())
 
 
 def test_stereo_music_averages_into_mono_narration(manager, tmp_path):

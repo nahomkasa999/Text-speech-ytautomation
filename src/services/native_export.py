@@ -13,6 +13,11 @@ import time
 from urllib.parse import unquote, urlsplit
 import uuid
 
+if os.name == 'nt':
+    import msvcrt
+else:
+    import fcntl
+
 from src.config import AUDIO_DIR, APP_DATA_DIR
 from src.ffmpeg_runtime import validate_ffmpeg
 
@@ -80,30 +85,21 @@ def _creationflags():
     return subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
 
-def _process_alive(pid):
-    if os.name == 'nt':
-        import ctypes
-        from ctypes import wintypes
-        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
-        kernel.OpenProcess.restype = wintypes.HANDLE
-        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        handle = kernel.OpenProcess(0x1000, False, pid)
-        if not handle:
-            return ctypes.get_last_error() != 87  # Access denied is not proof of death.
-        try:
-            code = wintypes.DWORD()
-            return not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value == 259
-        finally:
-            kernel.CloseHandle(handle)
+def _lock(handle):
+    """Take the journal record's exclusive lock without waiting.
+
+    The OS releases it when the owner exits, in any PID namespace, so a held
+    lock is the only reliable sign that an export is still running.
+    """
     try:
-        os.kill(pid, 0)
+        handle.seek(0)
+        if os.name == 'nt':
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         return True
-    except ProcessLookupError:
+    except OSError:
         return False
-    except PermissionError:
-        return True
 
 
 @dataclass
@@ -130,6 +126,7 @@ class ExportJob:
     started: float = field(default_factory=time.monotonic)
     touched: float = field(default_factory=time.monotonic)
     process: object = None
+    claim: object = None
     logs: deque = field(default_factory=lambda: deque(maxlen=24))
     lock: object = field(default_factory=threading.RLock)
     operation: object = field(default_factory=threading.Lock)
@@ -160,19 +157,17 @@ class ExportManager:
 
     def _recover(self):
         for record in self.journal_dir.glob('*.json'):
+            if not re.fullmatch('[0-9a-f]{32}', record.stem):
+                continue
             try:
-                if not re.fullmatch('[0-9a-f]{32}', record.stem):
-                    continue
-                entry = json.loads(record.read_text())
-                pid = entry['pid']
-                if not isinstance(pid, int) or pid <= 0 or _process_alive(pid):
-                    continue
-                target = Path(entry['target'])
-                if not target.is_absolute():
-                    continue
-                for suffix in ('partial', 'music'):
-                    path = target.parent / f'.{target.name}.{record.stem}.{suffix}'
-                    path.unlink(missing_ok=True)
+                with record.open('r+b') as claim:
+                    if not _lock(claim):
+                        continue
+                    target = Path(json.loads(claim.read())['target'])
+                    if not target.is_absolute():
+                        continue
+                    for suffix in ('partial', 'music'):
+                        (target.parent / f'.{target.name}.{record.stem}.{suffix}').unlink(missing_ok=True)
                 record.unlink()
             except (OSError, ValueError, KeyError, TypeError):
                 continue
@@ -180,6 +175,7 @@ class ExportManager:
     def _forget(self, job):
         try:
             if not job.partial.exists() and not job.music.exists():
+                job.claim.close()
                 (self.journal_dir / f'{job.id}.json').unlink(missing_ok=True)
         except OSError:
             pass
@@ -217,11 +213,16 @@ class ExportManager:
             token = uuid.uuid4().hex
             partial = target.parent / f'.{target.name}.{token}.partial'
             music = target.parent / f'.{target.name}.{token}.music'
-            (self.journal_dir / f'{token}.json').write_text(json.dumps({'pid': os.getpid(), 'target': str(target)}))
+            claim = (self.journal_dir / f'{token}.json').open('x+b')
+            if not _lock(claim):
+                claim.close()
+                raise OSError('Could not reserve the export journal. Try again.')
+            claim.write(json.dumps({'target': str(target)}).encode())
+            claim.flush()
             with partial.open('xb'):
                 pass
             job = ExportJob(token, target, partial, music, audio, executable, width, height, fps,
-                            duration, math.ceil(duration * fps), clean, sample_rate, channels)
+                            duration, math.ceil(duration * fps), clean, sample_rate, channels, claim=claim)
             self.jobs[token] = job
             while len(self.jobs) > 8:
                 self.jobs.pop(next(iter(self.jobs)))

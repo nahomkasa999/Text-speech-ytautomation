@@ -50,7 +50,7 @@ def inspect(path):
 
 def run_case(directory, seconds, width, height, mode, repeat, iteration, container):
     target = directory / f'{mode}-{iteration}.{container}'
-    manager = native_export.ExportManager()
+    manager = native_export.ExportManager(journal_dir=directory / 'jobs')
     proc = psutil.Process()
     stop = threading.Event()
     peak = dict(rss=0)
@@ -124,7 +124,8 @@ def main():
     parser.add_argument('--output', type=Path, default=Path(tempfile.gettempdir()) / 'book-narrator-cpu-benchmark')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    report = dict(platform=platform.platform(), processor=platform.processor(), logical_cpus=os.cpu_count(),
+    commit = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    report = dict(commit=commit, arguments={k: str(v) for k, v in vars(args).items()}, platform=platform.platform(), processor=platform.processor(), logical_cpus=os.cpu_count(),
                   load_average=os.getloadavg() if hasattr(os, 'getloadavg') else None,
                   ffmpeg=subprocess.check_output([native_export.validate_ffmpeg(), '-version'], text=True).splitlines()[0],
                   scope='Native writer + software encoder + streaming audio. Excludes Canvas, WebView and HTTP transport.',
