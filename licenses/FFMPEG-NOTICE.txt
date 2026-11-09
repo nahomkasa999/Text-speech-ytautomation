@@ -1,0 +1,25 @@
+Book Narrator distributes an unmodified FFmpeg executable from the
+imageio-ffmpeg 0.6.0 platform wheel. FFmpeg runs as a separate process.
+FFmpeg copyright (c) 2000-2024 the FFmpeg developers and contributors.
+This build includes GPL components, including libx264, and is licensed
+under GNU GPL version 3 or later. See GPL-3.0.txt and ffmpeg-build.txt.
+No warranty is provided. You may replace the executable in the app's
+ffmpeg directory with a compatible build supporting the required codecs.
+
+Binary provider and wheel source:
+https://github.com/imageio/imageio-ffmpeg/tree/v0.6.0
+https://github.com/imageio/imageio-binaries/tree/master/ffmpeg
+FFmpeg source and build information:
+https://ffmpeg.org/download.html
+https://github.com/imageio/imageio-ffmpeg/blob/v0.6.0/imageio_ffmpeg/_definitions.py
+Windows upstream builds: https://www.gyan.dev/ffmpeg/builds/
+Linux upstream builds: https://johnvansickle.com/ffmpeg/
+
+Distribution prerequisite: the distributor must provide complete matching
+corresponding source, including enabled external libraries and build scripts,
+alongside the binary downloads in accordance with GPLv3 section 6. The links
+above identify upstream projects; they are not a substitute for providing
+complete corresponding source. No written source offer is made by this notice.
+
+The imageio-ffmpeg wrapper has a separate BSD 2-Clause license, included
+as imageio-ffmpeg-LICENSE.txt. That license does not replace FFmpeg's GPL.

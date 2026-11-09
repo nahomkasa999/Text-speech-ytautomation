@@ -28,3 +28,5 @@ outputs/draft.json
 outputs/webview_storage/
 outputs/tmp/
 version.json
+
+outputs/export-jobs/

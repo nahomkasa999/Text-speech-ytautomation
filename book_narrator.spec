@@ -10,7 +10,12 @@ All specifications can be adjusted via environment variables or GitHub Actions i
 
 import os
 import sys
+import shutil
+import subprocess
+from pathlib import Path
+from importlib.metadata import distribution
 from PyInstaller.utils.hooks import collect_all
+from src.ffmpeg_runtime import wheel_ffmpeg, validate_ffmpeg
 
 block_cipher = None
 
@@ -34,6 +39,28 @@ if BUNDLE_MODELS and os.path.exists('models'):
 
 binaries = []
 hiddenimports = []
+
+# Require the wheel binary itself. Never silently package PATH's FFmpeg.
+ffmpeg = wheel_ffmpeg()
+validate_ffmpeg(ffmpeg)
+ffmpeg_dir = Path('build/ffmpeg-runtime')
+ffmpeg_dir.mkdir(parents=True, exist_ok=True)
+packaged_ffmpeg = ffmpeg_dir / ('ffmpeg.exe' if sys.platform == 'win32' else 'ffmpeg')
+shutil.copy2(ffmpeg, packaged_ffmpeg)
+binaries.append((str(packaged_ffmpeg), 'ffmpeg'))
+for filename in ('FFMPEG-NOTICE.txt', 'GPL-3.0.txt'):
+    datas.append((str(Path('licenses') / filename), 'licenses'))
+wheel_license = distribution('imageio-ffmpeg').locate_file('imageio_ffmpeg-0.6.0.dist-info/LICENSE')
+if not wheel_license.is_file():
+    raise RuntimeError('The imageio-ffmpeg wheel license is missing')
+shutil.copy2(wheel_license, ffmpeg_dir / 'imageio-ffmpeg-LICENSE.txt')
+datas.append((str(ffmpeg_dir / 'imageio-ffmpeg-LICENSE.txt'), 'licenses'))
+build_notice = ffmpeg_dir / 'ffmpeg-build.txt'
+build_notice.write_text('\n'.join(
+    subprocess.check_output([str(ffmpeg), option], stderr=subprocess.STDOUT, text=True)
+    for option in ('-version', '-L')
+), encoding='utf-8')
+datas.append((str(build_notice), 'licenses'))
 
 # Packages that ship data files / native libraries the local Kokoro engine needs:
 #   kokoro_onnx     -> config.json (required at runtime)

@@ -8,3 +8,4 @@ onnxruntime>=1.19.0
 espeakng-loader>=0.2.0
 pywebview>=5.0.0
 pyinstaller>=6.10.0
+imageio-ffmpeg==0.6.0

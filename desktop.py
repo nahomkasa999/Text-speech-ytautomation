@@ -144,6 +144,13 @@ def _rollback_watchdog(version: str) -> None:
 
 
 def main() -> None:
+    if "--check-media-engine" in sys.argv:
+        try:
+            from src.ffmpeg_runtime import validate_ffmpeg
+            validate_ffmpeg()
+        except Exception:
+            raise SystemExit(1)
+        return
     import app_boot
 
     # After an update the app restarts itself: wait for the old window to close.
@@ -185,7 +192,11 @@ def main() -> None:
     if boot["trying"]:
         threading.Thread(target=_rollback_watchdog, args=(boot["version"],), daemon=True).start()
 
-    _open_window(f"http://{HOST}:{port}", os.path.join(APP_DATA_DIR, "outputs", "webview_storage"))
+    try:
+        _open_window(f"http://{HOST}:{port}", os.path.join(APP_DATA_DIR, "outputs", "webview_storage"))
+    finally:
+        from src.services.native_export import export_manager
+        export_manager.shutdown()
 
 
 if __name__ == "__main__":

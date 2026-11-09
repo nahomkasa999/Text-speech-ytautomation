@@ -17,6 +17,8 @@ from src.routes.views import router as views_router
 from src.routes.voice_design import router as voice_design_router
 from src.routes.files import router as files_router
 from src.routes.updates import router as updates_router
+from src.routes.native_export import router as native_export_router
+from src.services.native_export import export_manager
 
 app = FastAPI(title="AI Book Narrator Studio")
 
@@ -30,6 +32,12 @@ app.include_router(narration_router)
 app.include_router(voice_design_router)
 app.include_router(files_router)
 app.include_router(updates_router)
+app.include_router(native_export_router)
+
+
+@app.on_event("shutdown")
+def stop_native_exports():
+    export_manager.shutdown()
 
 # Mount static frontend
 os.makedirs(STATIC_DIR, exist_ok=True)

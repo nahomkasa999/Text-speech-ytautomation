@@ -94,6 +94,25 @@ class DesktopApi:
         except Exception as exc:  # report to the UI instead of failing silently
             return {"ok": False, "error": str(exc)}
 
+    def prepare_video_export(self, settings: dict) -> dict:
+        """Select the destination before probing audio or starting the encoder."""
+        try:
+            from src.services.native_export import export_manager
+
+            if not isinstance(settings, dict):
+                raise ValueError("Invalid video export settings.")
+            extension = settings.get("format", "mp4")
+            if extension not in ("mp4", "webm"):
+                raise ValueError("Unsupported video format.")
+            name = os.path.basename(settings.get("filename") or f"video.{extension}")
+            name = os.path.splitext(name)[0] + "." + extension
+            target = self._ask_save_path(name)
+            if not target:
+                return {"ok": False, "cancelled": True}
+            return export_manager.prepare(target, settings)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
     def reveal(self, path: str) -> bool:
         """Open the folder containing a saved file (selecting it on Windows)."""
         if not path or not os.path.exists(path):

@@ -1,0 +1,6 @@
+ts	phase	decision	why	evidence	result
+2026-11-09T09:51:53Z	frame	Use existing fix as baseline on a new review branch	Preserve prior streaming fix and leave main unchanged	ec7f123	VERIFIED checkout
+2026-11-09T09:56:07Z	design	Keep Canvas and stream bounded RGBA states to native CPU FFmpeg	Both explorations found full native scene rendering would duplicate font and wave behavior	.audit/cpu-export-design.md	implementation in progress
+2026-11-09T10:10:45Z	verification	Disabled H264 B-frames and restored AAC channel layout after real exports failed	Decoded frames proved MP4 video delay and music test rejected mono layout	tests/test_native_export.py	22 tests passed after correction
+2026-11-09T10:10:45Z	verification	Reject initial benchmark measurements and rerun after timestamp fix	Old outputs began video at 0.066667 while audio began at zero	/tmp/book-narrator-cpu-benchmark/results.json	superseded; final benchmark running
+2026-11-09T10:10:45Z	review	Skip hidden media preload after independent reviewer reproduced failure	Hidden missing images must not block an export that never draws them	static/js/video/exportRenderer.js	fixed; browser checks pending
