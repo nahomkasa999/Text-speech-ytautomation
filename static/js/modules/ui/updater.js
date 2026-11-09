@@ -82,7 +82,13 @@ function renderUpdateSection(body, info, { showLater }) {
     }
 
     const card = el('div', 'upd-card');
-    card.appendChild(el('div', 'upd-card-title', `Version ${latest.version} is available${(s.download_size || latest.size) ? ` (${fmtSize(s.download_size || latest.size)})` : ''}`));
+    const size = s.download_size || latest.size;
+    // An engine update downloads only the files that changed: say "up to".
+    const sizeText = size ? ` (${s.size_is_max ? 'up to ' : ''}${fmtSize(size)})` : '';
+    // Already on the newest app code, only the engine is behind (e.g. after the 1.0.16 bridge).
+    const title = s.needs_engine && latest.version === s.current?.version
+      ? 'Finish the update' : `Version ${latest.version} is available`;
+    card.appendChild(el('div', 'upd-card-title', `${title}${sizeText}`));
     if (latest.notes) card.appendChild(el('p', 'upd-notes', latest.notes));
     section.appendChild(card);
 
@@ -94,14 +100,27 @@ function renderUpdateSection(body, info, { showLater }) {
       section.insertBefore(el('p', 'upd-warn', 'This copy is running from source (version dev), so it can\'t update itself. Use git pull, or install the desktop app.'), actions);
       return;
     }
-    if (s.needs_installer && !s.installer_in_app) {
-      section.insertBefore(el('p', 'upd-warn', 'This update includes a voice engine update that can\'t be installed from inside the app on this system yet.'), actions);
+    if (s.needs_engine && !s.in_app) {
+      section.insertBefore(el('p', 'upd-warn', 'This update includes an engine update that can\'t be installed from inside the app on this system yet.'), actions);
       return;
     }
-    if (s.needs_installer) {
-      section.insertBefore(el('p', 'upd-warn', 'This update includes a voice engine update, so the download is bigger this time. The app closes and reopens by itself. Your projects are kept.'), actions);
+    if (s.needs_engine) {
+      section.insertBefore(el('p', 'upd-warn', s.kind === 'engine_sync'
+        ? 'This update includes an engine update. Only the files that changed are downloaded (never the voice model). The app closes and reopens by itself. Your projects are kept.'
+        : 'This update includes an engine update, so the download is bigger this time. The app closes and reopens by itself. Your projects are kept.'), actions);
     }
 
+    if (dl.state === 'checking') {
+      const bar = el('div', 'upd-progress');
+      const fill = el('div', 'upd-progress-fill');
+      fill.style.width = `${Math.round((dl.progress || 0) * 100)}%`;
+      bar.appendChild(fill);
+      section.insertBefore(bar, actions);
+      const row = el('div', 'upd-progress-row');
+      row.append(el('span', 'upd-muted', 'Checking which files changed…'));
+      section.insertBefore(row, actions);
+      return;
+    }
     if (dl.state === 'downloading' || dl.state === 'verifying') {
       const bar = el('div', 'upd-progress');
       const fill = el('div', 'upd-progress-fill');
@@ -152,12 +171,16 @@ function renderUpdateSection(body, info, { showLater }) {
     actions.appendChild(go);
   };
 
+  let shown = '';
   const poll = () => {
     clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
       const s = await api.status(false).catch(() => null);
       if (!s) return; // app is closing to install: keep showing "Installing…"
       if (!modal) return;
+      const key = JSON.stringify([s.update_available, s.kind, s.download]);
+      if (key === shown) return; // nothing new: keep the buttons as they are
+      shown = key;
       render(s);
       if (s.download.state === 'ready') {
         clearInterval(pollTimer);
@@ -169,7 +192,10 @@ function renderUpdateSection(body, info, { showLater }) {
   };
 
   render(info);
-  if (['downloading', 'verifying', 'installing'].includes(info.download?.state)) poll();
+  shown = JSON.stringify([info.update_available, info.kind, info.download]);
+  // Keep watching while the dialog is open: an update may also start by itself
+  // (right after the 1.0.16 bridge, or after an engine update).
+  if (info.update_available && info.can_self_update) poll();
 }
 
 async function doRestart(section) {
@@ -222,7 +248,7 @@ async function backgroundCheck() {
     const info = await api.status(true);
     // Pop up when there is something to install here, or when an update is
     // already downloading (e.g. finishing up right after an engine update).
-    const busy = ['downloading', 'verifying', 'installing', 'ready'].includes(info.download?.state);
+    const busy = ['checking', 'downloading', 'verifying', 'installing', 'ready'].includes(info.download?.state);
     if (info.update_available && info.can_self_update && !dismissedThisSession && !modal) showUpdatePrompt(info);
     else if (busy && !modal) showUpdatePrompt(info);
   } catch (e) { /* offline: try again later */ }
