@@ -21,3 +21,9 @@ EXPORT_TEST_BROWSER=playwright PLAYWRIGHT_BROWSERS_PATH=/tmp/book-narrator-brows
 ```
 
 Correct benchmark CLI spelling uses spaces, e.g. --seconds 20 --width 1280 --height 720 --runs 5. Browser binaries installed in /tmp/book-narrator-browsers. Test dependencies in requirements-test.txt. Main code paths: src/services/native_export.py, src/routes/native_export.py, src/desktop_api.py, static/js/video/{nativeExporter,exportRenderer}.js and static/js/modules/studio/exporter/exportManager.js. Audit artifacts under .audit need final verification updates. Existing outputs/settings.json belongs to user and must not be committed. No installer build or release has been published.
+
+## Latest verified correction
+
+The browser frame mismatch was test-side CFR duplication. Adding -fps_mode passthrough to the raw decode command yielded the actual60 frames. The complete browser native-export test now passes, including static captions, animated MP4/WebM, pixel comparisons, progress values and cancellation. Command: PLAYWRIGHT_BROWSERS_PATH=/tmp/book-narrator-browsers .venv/bin/python -m pytest tests/test_export_browser.py -q. Result:1 passed in8.70s. This supersedes the open frame-count concern above. Remaining work is renderer parity matrix, benchmark scratch-file race, final reproducible benchmark/report, and Windows validation.
+
+Renderer pixel/timing matrix also passed with Chromium using EXPORT_TEST_BROWSER=playwright PLAYWRIGHT_BROWSERS_PATH=/tmp/book-narrator-browsers node tests/render-export.mjs. Includes seven wave styles, rotated/stroked text, clipping, fades and scaled output. First git push failed because github.com could not resolve; local commits are safe. Retry git push -u origin fix/cpu-native-export when network DNS works.
