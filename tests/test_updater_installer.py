@@ -387,3 +387,39 @@ class StartAndResumeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WebviewCacheTests(unittest.TestCase):
+    def make(self, d):
+        root = Path(d, "webview_storage")
+        for rel in ("EBWebView/Default/Cache/Cache_Data/f_000001", "EBWebView/Default/Code Cache/js/index",
+                    "EBWebView/GPUCache/data_0", "EBWebView/Default/Local Storage/leveldb/000003.log",
+                    "EBWebView/Default/IndexedDB/x.db"):
+            Path(root, rel).parent.mkdir(parents=True, exist_ok=True)
+            Path(root, rel).write_text("x")
+        return root
+
+    def test_clears_http_caches_once_per_version_and_keeps_settings(self):
+        from src import webview_cache
+        with tempfile.TemporaryDirectory() as d:
+            root = self.make(d)
+            self.assertTrue(webview_cache.clear_if_version_changed(str(root), "1.0.21"))
+            self.assertFalse(Path(root, "EBWebView/Default/Cache").exists())
+            self.assertFalse(Path(root, "EBWebView/Default/Code Cache").exists())
+            self.assertFalse(Path(root, "EBWebView/GPUCache").exists())
+            self.assertTrue(Path(root, "EBWebView/Default/Local Storage/leveldb/000003.log").exists())
+            self.assertTrue(Path(root, "EBWebView/Default/IndexedDB/x.db").exists())
+            Path(root, "EBWebView/Default/Cache").mkdir()
+            self.assertFalse(webview_cache.clear_if_version_changed(str(root), "1.0.21"))  # same version: kept
+            self.assertTrue(Path(root, "EBWebView/Default/Cache").exists())
+            self.assertTrue(webview_cache.clear_if_version_changed(str(root), "1.0.22"))
+            self.assertFalse(Path(root, "EBWebView/Default/Cache").exists())
+
+    def test_old_ui_sees_update_now_not_a_link(self):
+        """A cached 1.0.16 dialog only knows needs_installer: it must be False when we can update in-app."""
+        with Env(OLD, 20), patch.object(updater, "fetch_manifest", return_value=v2_manifest()), \
+             patch.object(updater, "can_self_update", return_value=True):
+            st = updater.status()
+        self.assertEqual(st["kind"], "engine_sync")
+        self.assertFalse(st["needs_installer"])
+        self.assertTrue(st["installer_url"])  # never "undefined" in an old dialog

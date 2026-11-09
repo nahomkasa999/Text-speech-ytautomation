@@ -267,11 +267,57 @@ jobs:
             --version "${APP_VERSION}" --engine "$ENGINE" --out release
           ls -la release
 
-      - name: Upload build artifact
+      # One artifact per file, so each can be downloaded on its own (the files are
+      # already compressed, so no extra compression). All names start with
+      # "BookNarrator-": the release and publish-update jobs collect them by that.
+      - name: "Artifact: Windows installer (Setup.exe)"
+        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: BookNarrator-${{ matrix.platform }}
-          path: release/*
+          name: BookNarrator-Setup-Windows
+          path: release/BookNarrator-Setup-*.exe
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: "Artifact: Windows portable exe"
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookNarrator-Portable-Windows
+          path: release/BookNarrator-Portable-*.exe
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: "Artifact: Windows engine update (used by the in-app updater)"
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookNarrator-EngineUpdate-Windows
+          path: |
+            release/BookNarrator-Engine-windows-*.zip
+            release/engine-files-windows-*.json
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: "Artifact: Linux app (tar.gz)"
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookNarrator-Linux
+          path: release/BookNarrator-Linux-*.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: "Artifact: Linux engine update (used by the in-app updater)"
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BookNarrator-EngineUpdate-Linux
+          path: |
+            release/BookNarrator-Engine-linux-*.zip
+            release/engine-files-linux-*.json
+          compression-level: 0
+          if-no-files-found: error
 
   release:
     needs: [update, build]
