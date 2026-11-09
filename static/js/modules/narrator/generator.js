@@ -3,6 +3,7 @@
  */
 
 import { showToast } from '../ui/toast.js';
+import { formatClock } from '../ui/timeFormat.js';
 
 export class NarrationGenerator {
   constructor({ el, state, callbacks }) {
@@ -15,6 +16,53 @@ export class NarrationGenerator {
 
   attachEvents() {
     this.el.btnGenerate.addEventListener('click', () => this.generate());
+    this.el.btnPauseGeneration.addEventListener('click', () => this._togglePause());
+    this.el.btnCancelGeneration.addEventListener('click', () => this._cancel());
+    this.spokenWords = [];
+    new ResizeObserver(() => this._fitSnippet()).observe(this.el.progressSnippetText);
+  }
+
+  _showSpoken(text) {
+    this.spokenWords = this.spokenWords.concat(text.split(/\s+/).filter(Boolean)).slice(-400);
+    this._fitSnippet();
+  }
+
+  /** Show as many of the newest words as the box can hold, cut at a word boundary. */
+  _fitSnippet() {
+    const box = this.el.progressSnippetText;
+    const words = this.spokenWords;
+    if (!words.length || !box.clientHeight) return;
+    const fits = (n) => {
+      box.textContent = (n < words.length ? '… ' : '') + words.slice(-n).join(' ');
+      return box.scrollHeight <= box.clientHeight + 1;
+    };
+    let low = 1, high = words.length;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (fits(mid)) low = mid; else high = mid - 1;
+    }
+    fits(low);
+  }
+
+  async _control(action) {
+    if (!this.jobId) return;
+    const response = await fetch(`/api/generate/${this.jobId}/${action}`, { method: 'POST' });
+    if (!response.ok) showToast('This generation has already finished.', 'error');
+  }
+
+  _togglePause() {
+    const pausing = !this.pauseRequested;
+    this.pauseRequested = pausing;
+    this.el.btnPauseGeneration.textContent = pausing ? 'Resume' : 'Pause';
+    this.el.progressStatusTitle.textContent = pausing ? 'Pausing after this sentence...' : 'Generating Narration...';
+    this._control(pausing ? 'pause' : 'resume');
+  }
+
+  _cancel() {
+    this.el.btnPauseGeneration.disabled = true;
+    this.el.btnCancelGeneration.disabled = true;
+    this.el.progressStatusTitle.textContent = 'Cancelling after this sentence...';
+    this._control('cancel');
   }
 
   async generate() {
@@ -66,6 +114,11 @@ export class NarrationGenerator {
 
   _setGeneratingState(isGen) {
     this.state.isGenerating = isGen;
+    this.jobId = null;
+    this.pauseRequested = false;
+    this.el.btnPauseGeneration.textContent = 'Pause';
+    this.el.btnPauseGeneration.disabled = !isGen;
+    this.el.btnCancelGeneration.disabled = !isGen;
     this.el.btnGenerate.disabled = isGen;
     this.el.btnGenerateLabel.textContent = isGen ? 'Generating Audio...' : 'Generate Narration';
     if (isGen) {
@@ -74,6 +127,8 @@ export class NarrationGenerator {
       this.el.progressBarFill.style.width = '0%';
       this.el.progressChunkInfo.textContent = 'Starting...';
       this.el.progressEta.textContent = 'ETA: Calculating...';
+      this.el.progressStatusTitle.textContent = 'Generating Narration...';
+      this.spokenWords = [];
       this.el.progressSnippetText.textContent = 'Filtering Markdown and chunking sentences...';
     }
   }
@@ -96,13 +151,27 @@ export class NarrationGenerator {
         if (!jsonStr) continue;
 
         const data = JSON.parse(jsonStr);
-        if (data.status === 'progress') {
+        if (data.status === 'started') {
+          this.jobId = data.job_id;
+          await this.callbacks.loadSessions();
+        } else if (data.status === 'paused') {
+          this.el.progressStatusTitle.textContent = 'Paused';
+        } else if (data.status === 'resumed') {
+          this.el.progressStatusTitle.textContent = 'Generating Narration...';
+        } else if (data.status === 'cancelled') {
+          this.el.progressCard.classList.add('hidden');
+          await this.callbacks.loadSessions();
+          showToast('Generation cancelled.', 'info');
+          return;
+        } else if (data.status === 'progress') {
           this.el.progressBarFill.style.width = `${data.percent}%`;
           this.el.progressChunkInfo.textContent = `Chunk ${data.current_chunk} / ${data.total_chunks} (${data.percent}%)`;
-          this.el.progressEta.textContent = `ETA: ${data.eta_seconds}s`;
-          this.el.progressSnippetText.textContent = data.current_text;
+          this.el.progressEta.textContent = `ETA: ${formatClock(data.eta_seconds)}`;
+          this._showSpoken(data.current_text);
         } else if (data.status === 'stitching') {
           this.el.progressBarFill.style.width = `98%`;
+          this.el.btnPauseGeneration.disabled = true;
+          this.el.btnCancelGeneration.disabled = true;
           this.el.progressStatusTitle.textContent = 'Finalizing Audio...';
           this.el.progressSnippetText.textContent = data.message;
         } else if (data.status === 'completed') {
@@ -113,6 +182,7 @@ export class NarrationGenerator {
           this.callbacks.saveBgForActiveSession?.(this.callbacks.getPersistableBgUrl?.());
           this.el.mainAudioPlayer.play().catch(() => {});
         } else if (data.status === 'error') {
+          await this.callbacks.loadSessions();
           throw new Error(data.error);
         }
       }

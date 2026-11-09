@@ -8,6 +8,12 @@ import { formatDuration } from '../ui/timeFormat.js';
 import { showToast } from '../ui/toast.js';
 import { TranscriptionLayer, AudioWidgetLayer, createLayerFromData } from '../../video/scene.js';
 
+const STATUS_LABELS = { generating: 'Generating…', cancelled: 'Cancelled', failed: 'Failed', interrupted: 'Interrupted' };
+
+export function hasAudio(sess) {
+  return Boolean(sess && sess.audio_url);
+}
+
 export class SessionsManager {
   constructor({ el, state, scene, callbacks }) {
     this.el = el;
@@ -46,7 +52,7 @@ export class SessionsManager {
         <div class="history-item-meta">
           <span>${sess.word_count.toLocaleString()} words</span>
           <span>•</span>
-          <span>${formatDuration(sess.duration_seconds)}</span>
+          <span>${STATUS_LABELS[sess.status] || formatDuration(sess.duration_seconds)}</span>
         </div>
       `;
 
@@ -78,6 +84,14 @@ export class SessionsManager {
     this.el.projectTitle.value = sess.title;
     this.el.bookText.value = sess.text;
     this.callbacks.updateStats();
+
+    if (!hasAudio(sess)) {
+      // Started, cancelled or failed before any audio existed: only the text can be reopened.
+      this.el.audioDeck.classList.add('hidden');
+      this.el.mainAudioPlayer.removeAttribute('src');
+      this.renderHistoryList();
+      return;
+    }
 
     this.el.audioDeck.classList.remove('hidden');
     this.el.deckTitle.textContent = sess.title;

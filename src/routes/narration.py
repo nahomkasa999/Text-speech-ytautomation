@@ -6,6 +6,8 @@ import os
 import time
 import json
 import asyncio
+import uuid
+from dataclasses import dataclass, field
 import numpy as np
 import soundfile as sf
 from fastapi import APIRouter, HTTPException
@@ -18,6 +20,18 @@ from src.services.engine_service import ENGINES, local_engine, session_mgr
 from src.services.voice_envelope import get_envelope
 
 router = APIRouter(tags=["narration"])
+
+
+@dataclass
+class GenerationJob:
+    running: asyncio.Event = field(default_factory=asyncio.Event)
+    cancelled: bool = False
+
+    def __post_init__(self):
+        self.running.set()
+
+
+_jobs: dict[str, GenerationJob] = {}
 
 @router.get("/audio/{filename}")
 def serve_audio(filename: str):
@@ -63,8 +77,29 @@ def preview_voice(req: PreviewRequest):
 
 async def stream_chunks(chunks, engine, req):
     """Async generator yielding Server-Sent Events for each chunk synthesis."""
+    job_id = uuid.uuid4().hex
+    job = _jobs[job_id] = GenerationJob()
+    session = session_mgr.create_session(
+        title=req.title or "", text=req.text, engine=req.engine, voice=req.voice, speed=req.speed,
+        paragraph_pause=req.paragraph_pause, sentence_pause=req.sentence_pause)
+    outcome = "interrupted"
+    try:
+        async for event in _synthesize(chunks, engine, req, job_id, job, session):
+            status = json.loads(event[6:])["status"]
+            if status in ("completed", "cancelled"):
+                outcome = status
+            elif status == "error":
+                outcome = "failed"
+            yield event
+    finally:
+        _jobs.pop(job_id, None)
+        if outcome != "completed":
+            session_mgr.update_session(session["id"], {"status": outcome})
+
+
+async def _synthesize(chunks, engine, req, job_id, job, session):
     total_chunks = len(chunks)
-    start_time = time.time()
+    active_seconds = 0.0
     audio_segments = []
     sample_rate = 24000
     chunk_timings = []
@@ -83,10 +118,19 @@ async def stream_chunks(chunks, engine, req):
         "sentence_pause": req.sentence_pause
     }
 
-    yield f"data: {json.dumps({'status': 'started', 'total_chunks': total_chunks})}\n\n"
+    yield f"data: {json.dumps({'status': 'started', 'job_id': job_id, 'session': session, 'total_chunks': total_chunks})}\n\n"
 
     for i, chunk in enumerate(chunks):
+        if not job.running.is_set() and not job.cancelled:
+            yield f"data: {json.dumps({'status': 'paused'})}\n\n"
+            await job.running.wait()
+            if not job.cancelled:
+                yield f"data: {json.dumps({'status': 'resumed'})}\n\n"
+        if job.cancelled:
+            yield f"data: {json.dumps({'status': 'cancelled'})}\n\n"
+            return
         text_to_speak = chunk["text"]
+        chunk_started = time.time()
         try:
             samples = await asyncio.to_thread(
                 engine.synthesize_segment,
@@ -114,12 +158,13 @@ async def stream_chunks(chunks, engine, req):
             yield f"data: {json.dumps({'status': 'error', 'error': str(exc)})}\n\n"
             return
 
-        elapsed = time.time() - start_time
+        active_seconds += time.time() - chunk_started
+        elapsed = active_seconds
         remaining = total_chunks - (i + 1)
         eta_seconds = round((elapsed / (i + 1)) * remaining)
         percent = int(((i + 1) / total_chunks) * 100)
 
-        yield f"data: {json.dumps({'status': 'progress', 'current_chunk': i + 1, 'total_chunks': total_chunks, 'percent': percent, 'eta_seconds': eta_seconds, 'elapsed_seconds': round(elapsed), 'current_text': text_to_speak[:70] + ('...' if len(text_to_speak) > 70 else '')})}\n\n"
+        yield f"data: {json.dumps({'status': 'progress', 'current_chunk': i + 1, 'total_chunks': total_chunks, 'percent': percent, 'eta_seconds': eta_seconds, 'elapsed_seconds': round(elapsed), 'current_text': text_to_speak})}\n\n"
 
     yield f"data: {json.dumps({'status': 'stitching', 'message': 'Assembling final audio file...'})}\n\n"
     final_audio = np.concatenate(audio_segments)
@@ -128,18 +173,13 @@ async def stream_chunks(chunks, engine, req):
     output_path = os.path.join(AUDIO_DIR, audio_filename)
     sf.write(output_path, final_audio, sample_rate)
 
-    session_data = session_mgr.save_session(
-        title=req.title or "",
-        text=req.text,
-        engine=req.engine,
-        voice=req.voice,
-        speed=req.speed,
-        audio_filename=audio_filename,
-        duration_seconds=duration_seconds,
-        paragraph_pause=req.paragraph_pause,
-        sentence_pause=req.sentence_pause,
-        synced_segments=chunk_timings
-    )
+    session_data = session_mgr.update_session(session["id"], {
+        "status": "completed",
+        "audio_filename": audio_filename,
+        "audio_url": f"/audio/{audio_filename}",
+        "duration_seconds": round(duration_seconds, 1),
+        "synced_segments": chunk_timings,
+    })
     yield f"data: {json.dumps({'status': 'completed', 'session': session_data})}\n\n"
 
 @router.post("/api/generate")
@@ -150,3 +190,30 @@ async def generate_narration_stream(req: GenerateRequest):
     if not chunks:
         raise HTTPException(status_code=400, detail="Text is empty or invalid.")
     return StreamingResponse(stream_chunks(chunks, engine, req), media_type="text/event-stream")
+
+
+def _job(job_id: str) -> GenerationJob:
+    job = _jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="This generation is no longer running.")
+    return job
+
+
+@router.post("/api/generate/{job_id}/pause")
+async def pause_generation(job_id: str):
+    _job(job_id).running.clear()
+    return {"ok": True}
+
+
+@router.post("/api/generate/{job_id}/resume")
+async def resume_generation(job_id: str):
+    _job(job_id).running.set()
+    return {"ok": True}
+
+
+@router.post("/api/generate/{job_id}/cancel")
+async def cancel_generation(job_id: str):
+    job = _job(job_id)
+    job.cancelled = True
+    job.running.set()
+    return {"ok": True}

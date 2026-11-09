@@ -16,3 +16,9 @@ export function formatDuration(seconds) {
   const secs = s % 60;
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
+
+export function formatClock(seconds) {
+  const s = Math.max(0, Math.round(seconds || 0));
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+}

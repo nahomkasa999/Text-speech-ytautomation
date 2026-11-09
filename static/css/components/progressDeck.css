@@ -78,11 +78,21 @@
 }
 
 .snippet-text {
+  flex: 1;
+  min-width: 0;
   color: var(--text-muted);
   font-style: italic;
-  white-space: nowrap;
+  line-height: 1.5;
+  max-height: calc(1.5em * 3);
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+.progress-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 /* AUDIO DECK */

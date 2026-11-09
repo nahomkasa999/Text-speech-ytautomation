@@ -50,6 +50,8 @@ function getNarratorElements() {
     progressEta: document.getElementById('progress-eta'),
     progressSnippetText: document.getElementById('progress-snippet-text'),
     progressStatusTitle: document.getElementById('progress-status-title'),
+    btnPauseGeneration: document.getElementById('btn-pause-generation'),
+    btnCancelGeneration: document.getElementById('btn-cancel-generation'),
     audioDeck: document.getElementById('audio-deck'),
     deckTitle: document.getElementById('deck-title'),
     deckSubtitle: document.getElementById('deck-subtitle'),

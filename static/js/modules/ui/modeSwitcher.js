@@ -1,6 +1,8 @@
 /**
  * View Mode Switching Coordinator (Narration View vs Video Studio View).
  */
+import { hasAudio } from '../narrator/sessionsManager.js';
+
 
 export class ModeSwitcher {
   constructor({ el, state, callbacks }) {
@@ -28,8 +30,9 @@ export class ModeSwitcher {
       this.el.panelVoiceSettings.classList.add('hidden');
       this.el.panelVideoSettings.classList.remove('hidden');
 
-      if (this.state.sessions.length > 0 && (!this.state.activeSession || !this.el.mainAudioPlayer.src)) {
-        this.callbacks.selectSession?.(this.state.sessions[0]);
+      const latestWithAudio = this.state.sessions.find(hasAudio);
+      if (latestWithAudio && (!this.state.activeSession || !this.el.mainAudioPlayer.src)) {
+        this.callbacks.selectSession?.(latestWithAudio);
       } else if (this.state.activeSession) {
         this.callbacks.buildTimeline?.();
         this.callbacks.updatePlayhead?.(this.el.mainAudioPlayer.currentTime || 0, this.el.mainAudioPlayer.duration || 10);

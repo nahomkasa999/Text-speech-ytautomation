@@ -22,6 +22,15 @@ from src.services.native_export import export_manager
 
 app = FastAPI(title="AI Book Narrator Studio")
 
+
+@app.middleware("http")
+async def revalidate_static_files(request, call_next):
+    # Without this, the window keeps running stale JS and HTML after the code changes.
+    response = await call_next(request)
+    if not request.url.path.startswith(("/api/", "/audio/")):
+        response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
 # Register modular API and View routers
 app.include_router(views_router)
 app.include_router(draft_router)
