@@ -237,7 +237,7 @@ def test_stereo_music_averages_into_mono_narration(manager, tmp_path):
     output = manager.finish(info['id'])['path']
     pcm = decoded_audio(output)
     assert max(abs(x) for x in pcm) < 10
-    _, _, channels = native._probe(shutil.which('ffmpeg'), output)
+    _, _, channels = native._probe(native.validate_ffmpeg(), output)
     assert channels == 1
 
 

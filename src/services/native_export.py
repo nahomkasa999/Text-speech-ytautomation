@@ -77,7 +77,8 @@ def _probe(executable, path):
         raise ValueError("FFmpeg could not read the narration audio duration and sample rate.")
     hours, minutes, seconds = map(float, duration.groups())
     audio_line = re.search(r'Audio:.*', metadata).group(0)
-    channels = 1 if ', mono,' in audio_line else 2
+    # FFmpeg prints "mono" for a known layout, "1 channels" for e.g. a plain mono WAV.
+    channels = 1 if re.search(r',\s*(?:mono|1 channels)\s*,', audio_line) else 2
     return hours * 3600 + minutes * 60 + seconds, int(sample_rate.group(1)), channels
 
 
