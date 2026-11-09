@@ -13,6 +13,7 @@ import { createNarratorSubsystem } from './modules/narrator/narratorInit.js';
 import { loadPartials } from './modules/ui/partialLoader.js';
 import { initPopovers } from './modules/ui/popover.js';
 import { initUpdater } from './modules/ui/updater.js';
+import { hasAudio } from './modules/narrator/sessionsManager.js';
 
 async function setupApp() {
   await loadPartials();
@@ -54,9 +55,10 @@ async function bootstrapData({ narrator, studio, state }) {
   await narrator.engineSelector.initialize();
   await narrator.draftService.restoreDraft();
   await narrator.sessionsManager.loadSessions();
-  if (state.sessions.length > 0 && !state.activeSession) {
+  const latestWithAudio = state.sessions.find(hasAudio);
+  if (latestWithAudio && !state.activeSession) {
     // keepLayers: don't wipe the layers just restored from the saved draft.
-    narrator.sessionsManager.selectSession(state.sessions[0], { keepLayers: true });
+    narrator.sessionsManager.selectSession(latestWithAudio, { keepLayers: true });
   }
   studio.initVideoStudio();
   narrator.refreshStats();

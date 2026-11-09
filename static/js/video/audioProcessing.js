@@ -1,20 +1,35 @@
 /**
- * Audio decoding and pitch-preserving time-stretching (WSOLA), and audio mixing.
+ * Audio decoding, pitch-preserving time-stretching (WSOLA), and music mixing.
+ *
+ * Audio is kept at the narration's own sample rate (24 kHz mono for Kokoro)
+ * and only resampled to the encoder's rate chunk by chunk while encoding.
+ * Decoding a 2-hour narration as 48 kHz stereo would need ~2.8 GB per copy;
+ * at 24 kHz mono it is ~0.7 GB, so long exports fit in memory.
  */
 
-export const SAMPLE_RATE = 48000;
+export const ENCODER_SAMPLE_RATE = 48000;
 
-export async function decodeAudio(url) {
+/** Sample rate from a WAV header, or null for other formats. */
+function wavSampleRate(bytes) {
+  if (bytes.byteLength < 28) return null;
+  const v = new DataView(bytes);
+  const tag = (o) => String.fromCharCode(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2), v.getUint8(o + 3));
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE' || tag(12) !== 'fmt ') return null;
+  const rate = v.getUint32(24, true);
+  return rate >= 8000 && rate <= 192000 ? rate : null;
+}
+
+/** Returns { channels: Float32Array[] (max 2), sampleRate }. */
+export async function decodeAudio(url, sampleRate = null) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch audio (${res.status})`);
   const bytes = await res.arrayBuffer();
-  const ctx = new OfflineAudioContext(2, 1, SAMPLE_RATE);
+  const rate = sampleRate || wavSampleRate(bytes) || ENCODER_SAMPLE_RATE;
+  const ctx = new OfflineAudioContext(1, 1, rate);
   const buf = await ctx.decodeAudioData(bytes);
   const channels = [];
-  for (let c = 0; c < Math.min(2, buf.numberOfChannels); c++) {
-    channels.push(new Float32Array(buf.getChannelData(c)));
-  }
-  return channels;
+  for (let c = 0; c < Math.min(2, buf.numberOfChannels); c++) channels.push(buf.getChannelData(c));
+  return { channels, sampleRate: rate };
 }
 
 /** Speed change without pitch preservation (like a tape speed-up). */
@@ -34,13 +49,17 @@ export function resampleChannels(channels, speed) {
   });
 }
 
-/** Pitch-preserving time stretch (WSOLA), tuned for speech. */
-export function timeStretchChannels(channels, speed) {
+/**
+ * Pitch-preserving time stretch (WSOLA), tuned for speech.
+ * Periodic Hann windows at 50% overlap sum to exactly 1, so no
+ * normalisation buffer is needed (that saved a full-length Float32Array).
+ */
+export function timeStretchChannels(channels, speed, sampleRate) {
   const inLen = channels[0].length;
-  const N = Math.round(SAMPLE_RATE * 0.03) & ~7;
+  const N = Math.round(sampleRate * 0.03) & ~7;
   const Hs = N / 2;
   const Ha = Hs * speed;
-  const delta = Math.round(SAMPLE_RATE * 0.01);
+  const delta = Math.round(sampleRate * 0.01);
   const D = 8;
 
   const monoLen = Math.floor(inLen / D);
@@ -54,9 +73,8 @@ export function timeStretchChannels(channels, speed) {
   const win = new Float32Array(N);
   for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N);
 
-  const outLen = Math.ceil(inLen / speed) + N;
-  const outs = channels.map(() => new Float32Array(outLen));
-  const wsum = new Float32Array(outLen);
+  const finalLen = Math.floor(inLen / speed);
+  const outs = channels.map(() => new Float32Array(finalLen + N));
   const Nd = N / D;
   const deltaD = Math.round(delta / D);
   let prevSrc = 0;
@@ -65,6 +83,7 @@ export function timeStretchChannels(channels, speed) {
     const ideal = Math.round(k * Ha);
     if (ideal + N + delta >= inLen) break;
     const outPos = k * Hs;
+    if (outPos > finalLen) break;
     let src = ideal;
     if (k > 0) {
       const targetD = Math.floor((prevSrc + Hs) / D);
@@ -85,21 +104,16 @@ export function timeStretchChannels(channels, speed) {
       const out = outs[c];
       for (let j = 0; j < N; j++) out[outPos + j] += input[src + j] * win[j];
     }
-    for (let j = 0; j < N; j++) wsum[outPos + j] += win[j];
     prevSrc = src;
   }
 
-  const finalLen = Math.floor(inLen / speed);
-  return outs.map((out) => {
-    for (let i = 0; i < outLen; i++) if (wsum[i] > 1e-3) out[i] /= wsum[i];
-    return out.subarray(0, finalLen);
-  });
+  return outs.map((out) => out.subarray(0, finalLen));
 }
 
-export function processAudio(channels, { speed, volume, preservePitch }) {
+export function processAudio(channels, { speed, volume, preservePitch, sampleRate }) {
   let out = channels;
   if (Math.abs(speed - 1) > 1e-3) {
-    out = preservePitch ? timeStretchChannels(out, speed) : resampleChannels(out, speed);
+    out = preservePitch ? timeStretchChannels(out, speed, sampleRate) : resampleChannels(out, speed);
   }
   if (Math.abs(volume - 1) > 1e-3) {
     for (const ch of out) for (let i = 0; i < ch.length; i++) ch[i] *= volume;
@@ -107,24 +121,22 @@ export function processAudio(channels, { speed, volume, preservePitch }) {
   return out;
 }
 
-export function mixAudioChannels(mainChannels, musicChannels, options = {}) {
-  const { musicVolume = 0.35, loopMusic = true } = options;
+/** Mixes looping background music into the narration channels, in place. */
+export function mixAudioChannels(mainChannels, musicChannels, { musicVolume = 0.35 } = {}) {
   if (!musicChannels || musicChannels.length === 0) return mainChannels;
-
-  const numChannels = mainChannels.length;
   const totalSamples = mainChannels[0].length;
   const musicSamples = musicChannels[0].length;
-  const mixed = mainChannels.map(ch => new Float32Array(ch));
+  const downmix = mainChannels.length === 1 && musicChannels.length > 1;
 
-  for (let c = 0; c < numChannels; c++) {
+  for (let c = 0; c < mainChannels.length; c++) {
     const srcCh = musicChannels[c % musicChannels.length];
-    const outCh = mixed[c];
+    const outCh = mainChannels[c];
     for (let i = 0; i < totalSamples; i++) {
-      if (!loopMusic && i >= musicSamples) break;
-      const mIdx = i % musicSamples;
-      const val = outCh[i] + srcCh[mIdx] * musicVolume;
-      outCh[i] = Math.max(-1.0, Math.min(1.0, val));
+      const m = i % musicSamples;
+      const music = downmix ? (musicChannels[0][m] + musicChannels[1][m]) * 0.5 : srcCh[m];
+      const val = outCh[i] + music * musicVolume;
+      outCh[i] = val > 1 ? 1 : (val < -1 ? -1 : val);
     }
   }
-  return mixed;
+  return mainChannels;
 }

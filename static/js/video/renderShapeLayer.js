@@ -75,7 +75,7 @@ export function drawVideoLayer(ctx, layer, currentTime) {
     const v = layer._videoEl;
     const start = layer.startTime || 0;
     const relTime = Math.max(0, currentTime - start);
-    if (Math.abs(v.currentTime - relTime) > 0.15 && !v.seeking) {
+    if (!layer._exportSeeking && Math.abs(v.currentTime - relTime) > 0.15 && !v.seeking) {
       v.currentTime = relTime;
     }
     if (v.readyState >= 2) {

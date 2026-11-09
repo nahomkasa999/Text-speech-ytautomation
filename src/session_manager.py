@@ -16,6 +16,16 @@ class SessionManager:
         self.db_path = os.path.join(base_dir, "outputs", "sessions.json")
         os.makedirs(self.audio_dir, exist_ok=True)
         self._ensure_db()
+        self._mark_interrupted()
+
+    def _mark_interrupted(self):
+        """A session still "generating" at startup lost its generator when the app last stopped."""
+        sessions = self._read_db()
+        stale = [s for s in sessions if s.get("status") == "generating"]
+        for s in stale:
+            s["status"] = "interrupted"
+        if stale:
+            self._write_db(sessions)
 
     def _ensure_db(self):
         if not os.path.exists(self.db_path):
@@ -44,35 +54,29 @@ class SessionManager:
                 return s
         return None
 
-    def save_session(
+    def create_session(
         self,
         title: str,
         text: str,
         engine: str,
         voice: str,
         speed: float,
-        audio_filename: str,
-        duration_seconds: float,
         paragraph_pause: float = 0.6,
         sentence_pause: float = 0.25,
-        synced_segments: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
+        """Record a narration the moment it starts. The audio fields arrive when it completes."""
         sessions = self._read_db()
         now_ts = time.time()
-        
-        # If title is empty, generate from beginning of text
+
         if not title.strip():
             words = text.strip().split()
             title = " ".join(words[:6]) + ("..." if len(words) > 6 else "")
             if not title:
                 title = f"Narration {time.strftime('%b %d, %H:%M')}"
 
-        word_count = len(text.split())
-        char_count = len(text)
-        
-        session_id = f"sess_{int(now_ts)}_{os.urandom(3).hex()}"
         session_data = {
-            "id": session_id,
+            "id": f"sess_{int(now_ts)}_{os.urandom(3).hex()}",
+            "status": "generating",
             "title": title,
             "text": text,
             "engine": engine,
@@ -80,12 +84,12 @@ class SessionManager:
             "speed": speed,
             "paragraph_pause": paragraph_pause,
             "sentence_pause": sentence_pause,
-            "synced_segments": synced_segments or [],
-            "word_count": word_count,
-            "char_count": char_count,
-            "audio_filename": audio_filename,
-            "audio_url": f"/audio/{audio_filename}",
-            "duration_seconds": round(duration_seconds, 1),
+            "synced_segments": [],
+            "word_count": len(text.split()),
+            "char_count": len(text),
+            "audio_filename": "",
+            "audio_url": "",
+            "duration_seconds": 0,
             "created_at_ts": now_ts,
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_ts))
         }

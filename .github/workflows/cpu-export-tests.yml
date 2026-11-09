@@ -1,0 +1,56 @@
+name: Verify CPU exports without publishing
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'static/js/video/**'
+      - 'static/js/modules/studio/exporter/**'
+      - 'tests/**'
+      - 'requirements*.txt'
+      - 'desktop.py'
+      - 'book_narrator.spec'
+      - 'licenses/**'
+      - '.github/workflows/cpu-export-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r requirements.txt -r requirements-test.txt
+      - run: python -m pytest tests/test_native_export.py tests/test_ffmpeg_runtime.py -q
+      - run: node tests/render-export.mjs --mock
+      - name: Build Windows folder without model downloads
+        if: runner.os == 'Windows'
+        env:
+          BUNDLE_MODELS: 'false'
+          ONEFILE: 'false'
+          SHOW_CONSOLE: 'true'
+        run: python -m PyInstaller --noconfirm book_narrator.spec
+      - name: Check the installed media engine with PATH fallback disabled
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & ./dist/book-narrator/book-narrator.exe --check-media-engine
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen media engine check failed' }
+          $ffmpeg = (Resolve-Path 'dist/book-narrator/_internal/ffmpeg/ffmpeg.exe').Path
+          & $ffmpeg -v error -nostdin -y -f lavfi -i 'color=c=blue:s=160x90:r=30:d=1' -f lavfi -i 'sine=frequency=440:duration=1' -c:v libx264 -bf 0 -pix_fmt yuv420p -c:a aac -t 1 "$env:RUNNER_TEMP/cpu-export.mp4"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged CPU MP4 encoding failed' }
+          & $ffmpeg -v error -nostdin -i "$env:RUNNER_TEMP/cpu-export.mp4" -f null -
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged MP4 decoding failed' }
+          & $ffmpeg -v error -nostdin -y -f lavfi -i 'color=c=blue:s=160x90:r=30:d=1' -f lavfi -i 'sine=frequency=440:duration=1' -c:v libvpx-vp9 -c:a libopus -t 1 "$env:RUNNER_TEMP/cpu-export.webm"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged CPU WebM encoding failed' }
+          & $ffmpeg -v error -nostdin -i "$env:RUNNER_TEMP/cpu-export.webm" -f null -
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged WebM decoding failed' }
