@@ -11,6 +11,10 @@ The "engine" is a fingerprint of everything an in-app update cannot change:
 the Python libraries (requirements.txt), the PyInstaller spec and the
 launcher/boot code inside the .exe. If it changes, users need the full installer.
 
+The installer_url / installer_size / installer_sha256 fields are NOT written
+here (the installer does not exist yet); scripts/add_installer_to_manifest.py
+adds them in the publish-update job, only when a new installer was built.
+
 Usage: make_update_package.py --version 1.0.20 --build 20 --repo owner/name [--notes "..."]
 """
 
@@ -82,7 +86,6 @@ def main() -> int:
         "size": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),
         "package_url": f"https://github.com/{args.repo}/releases/download/updates/{zip_name}",
-        "installer_url": f"https://github.com/{args.repo}/releases/latest",
         "published_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     with open(os.path.join(args.out, "update.json"), "w", encoding="utf-8") as f:

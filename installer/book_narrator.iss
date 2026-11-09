@@ -62,4 +62,7 @@ Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}.exe"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}.exe"; Tasks: desktopicon
 
 [Run]
+; Interactive install: "Launch now" checkbox on the last wizard page.
 Filename: "{app}\{#AppExeName}.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; Silent install (the in-app updater runs /VERYSILENT): reopen the app, since no wizard page is shown.
+Filename: "{app}\{#AppExeName}.exe"; Flags: nowait; Check: WizardSilent

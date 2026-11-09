@@ -10,7 +10,10 @@ release tagged "updates" (see .github/workflows/build.yml). This module:
   - restarts the app; app_boot.py then runs the new version and rolls back
     automatically if it fails to start.
 If an update needs newer libraries (a different "engine"), it cannot be
-installed in place and the UI points to the full installer instead.
+installed in place. On Windows the app then downloads the full installer
+itself (size + SHA-256 verified), runs it silently and quits; the installer
+reopens the app. Elsewhere, or if the manifest has no installer file, the UI
+falls back to the GitHub releases page.
 """
 
 import hashlib
@@ -34,10 +37,12 @@ MANIFEST_URL = os.environ.get(
 )
 INSTALLER_PAGE = f"https://github.com/{REPO}/releases/latest"
 CHECK_CACHE_SECONDS = 600
+INSTALLER_ARGS = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
 
 _lock = threading.Lock()
 _manifest_cache = {"at": 0.0, "data": None, "error": None}
-_download = {"state": "idle", "progress": 0.0, "error": None, "version": None}
+_download = {"state": "idle", "progress": 0.0, "error": None, "version": None,
+             "kind": "package", "done": 0, "total": 0}
 
 
 def can_self_update() -> bool:
@@ -62,6 +67,17 @@ def fetch_manifest(force: bool = False) -> Optional[dict]:
     return data
 
 
+def has_installer_fields(manifest: Optional[dict]) -> bool:
+    """True when the manifest points at a directly downloadable, checkable installer."""
+    m = manifest or {}
+    return bool(m.get("installer_url") and m.get("installer_sha256") and int(m.get("installer_size") or 0) > 0
+                and m.get("installer_url") != INSTALLER_PAGE)
+
+
+def can_install_in_app(manifest: Optional[dict]) -> bool:
+    return sys.platform == "win32" and has_installer_fields(manifest)
+
+
 def status(force_check: bool = False) -> dict:
     current = current_info()
     manifest = fetch_manifest(force_check)
@@ -78,7 +94,10 @@ def status(force_check: bool = False) -> dict:
         "can_self_update": can_self_update(),
         "update_available": available,
         "needs_installer": needs_installer,
-        "installer_url": (manifest or {}).get("installer_url") or INSTALLER_PAGE,
+        # Page link for the manual fallback (never the direct .exe).
+        "installer_url": INSTALLER_PAGE,
+        "installer_in_app": bool(available and needs_installer and can_install_in_app(manifest)),
+        "installer_size": int((manifest or {}).get("installer_size") or 0),
         "latest": {
             "version": manifest.get("version"),
             "build": manifest.get("build"),
@@ -101,6 +120,89 @@ def _safe_extract(zf: zipfile.ZipFile, target: str) -> None:
     zf.extractall(target)
 
 
+def _stream_to_file(url: str, part: str, expected_size: int) -> tuple:
+    """Stream `url` to `part`, updating _download progress. Returns (bytes, sha256 hex)."""
+    digest = hashlib.sha256()
+    done = 0
+    with httpx.Client(timeout=60.0, follow_redirects=True) as client:
+        with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            total = expected_size or int(resp.headers.get("content-length") or 0)
+            _download["total"] = total
+            with open(part, "wb") as f:
+                for chunk in resp.iter_bytes(64 * 1024):
+                    f.write(chunk)
+                    digest.update(chunk)
+                    done += len(chunk)
+                    _download["done"] = done
+                    if total:
+                        _download["progress"] = min(0.99, done / total)
+    return done, digest.hexdigest()
+
+
+def _launch_installer(path: str) -> None:
+    """Run the verified installer silently, then quit so no files are locked.
+
+    KNOWN TRADE-OFF: unlike the small in-app updates, a full installer replace
+    has NO automatic rollback. If the new version fails to start after the silent
+    install, the user must reinstall the previous version from GitHub.
+    The installer (CloseApplications=yes) also closes us as a backstop, and its
+    [Run] entry reopens the app after a silent install.
+    """
+    import subprocess
+    kwargs = {"close_fds": True}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen([path] + INSTALLER_ARGS, **kwargs)
+    os._exit(0)
+
+
+def _run_installer_download(manifest: dict) -> None:
+    version = str(manifest["version"])
+    root = app_boot.app_root()
+    name = f"BookNarrator-Setup-{version}.exe"
+    final = os.path.join(root, name)
+    part = final + ".part"
+    ok = False
+    try:
+        os.makedirs(root, exist_ok=True)
+        _download.update(state="downloading", progress=0.0, error=None, version=version,
+                         kind="installer", done=0, total=0)
+        expected_size = int(manifest.get("installer_size") or 0)
+        if shutil.disk_usage(root).free < 2 * expected_size:
+            need = (2 * expected_size) // (1024 * 1024)
+            raise RuntimeError(f"Not enough free disk space. Free up at least {need} MB and try again.")
+        for old in os.listdir(root):  # leftovers from earlier attempts
+            if old.startswith("BookNarrator-Setup-") and (old.endswith(".exe") or old.endswith(".part")):
+                try:
+                    os.remove(os.path.join(root, old))
+                except OSError:
+                    pass
+
+        done, sha = _stream_to_file(manifest["installer_url"], part, expected_size)
+
+        _download.update(state="verifying", progress=0.99)
+        if done != expected_size:
+            raise RuntimeError("The download was incomplete. Please try again.")
+        if sha.lower() != str(manifest.get("installer_sha256", "")).lower():
+            raise RuntimeError("The download failed its integrity check. Please try again.")
+        os.replace(part, final)
+        ok = True
+        _download.update(state="installing", progress=1.0)
+        time.sleep(1.0)  # let the UI show "Installing…"
+        _launch_installer(final)
+    except Exception as exc:
+        ok = False  # also covers a failed launch: do not keep the file
+        _download.update(state="error", error=str(exc))
+    finally:
+        if not ok:
+            for p in (part, final):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+
+
 def _run_download(manifest: dict) -> None:
     version = str(manifest["version"])
     root = app_boot.app_root()
@@ -109,26 +211,15 @@ def _run_download(manifest: dict) -> None:
     staging = os.path.join(root, f"{version}.staging")
     final = os.path.join(root, version)
     try:
-        _download.update(state="downloading", progress=0.0, error=None, version=version)
+        _download.update(state="downloading", progress=0.0, error=None, version=version,
+                         kind="package", done=0, total=0)
         expected_size = int(manifest.get("size") or 0)
-        digest = hashlib.sha256()
-        done = 0
-        with httpx.Client(timeout=60.0, follow_redirects=True) as client:
-            with client.stream("GET", manifest["package_url"]) as resp:
-                resp.raise_for_status()
-                total = expected_size or int(resp.headers.get("content-length") or 0)
-                with open(part, "wb") as f:
-                    for chunk in resp.iter_bytes(64 * 1024):
-                        f.write(chunk)
-                        digest.update(chunk)
-                        done += len(chunk)
-                        if total:
-                            _download["progress"] = min(0.99, done / total)
+        done, sha = _stream_to_file(manifest["package_url"], part, expected_size)
 
         _download.update(state="verifying", progress=0.99)
         if expected_size and done != expected_size:
             raise RuntimeError("The download was incomplete. Please try again.")
-        if digest.hexdigest().lower() != str(manifest.get("sha256", "")).lower():
+        if sha.lower() != str(manifest.get("sha256", "")).lower():
             raise RuntimeError("The download failed its integrity check. Please try again.")
 
         shutil.rmtree(staging, ignore_errors=True)
@@ -163,14 +254,19 @@ def start_download() -> dict:
     if not can_self_update():
         return {"ok": False, "error": "Updates can only be installed in the desktop app."}
     with _lock:
-        if _download["state"] in ("downloading", "verifying"):
+        if _download["state"] in ("downloading", "verifying", "installing"):
             return {"ok": True}
         info = status(force_check=True)
         if not info["update_available"]:
             return {"ok": False, "error": "You already have the latest version."}
+        manifest = _manifest_cache["data"]
         if info["needs_installer"]:
-            return {"ok": False, "error": "This update needs the full installer.", "installer_url": info["installer_url"]}
-        threading.Thread(target=_run_download, args=(_manifest_cache["data"],), daemon=True).start()
+            if not can_install_in_app(manifest):
+                # Fallback: no installer file in the manifest (or not Windows).
+                return {"ok": False, "error": "This update needs the full installer.", "installer_url": info["installer_url"]}
+            threading.Thread(target=_run_installer_download, args=(manifest,), daemon=True).start()
+        else:
+            threading.Thread(target=_run_download, args=(manifest,), daemon=True).start()
     return {"ok": True}
 
 

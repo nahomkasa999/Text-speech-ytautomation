@@ -82,7 +82,9 @@ function renderUpdateSection(body, info, { showLater }) {
     const actions = el('div', 'upd-actions');
     section.appendChild(actions);
 
-    if (s.needs_installer) {
+    // Fallback: no installer file in the manifest (or not Windows): GitHub page.
+    const manualOnly = s.needs_installer && !s.installer_in_app;
+    if (manualOnly) {
       section.insertBefore(el('p', 'upd-warn', 'This update changes the voice engine, so it needs the full installer this one time.'), actions);
       const a = el('a', 'btn btn-primary btn-sm', 'Download installer');
       a.href = s.installer_url;
@@ -90,6 +92,9 @@ function renderUpdateSection(body, info, { showLater }) {
       a.rel = 'noopener';
       actions.appendChild(a);
       return;
+    }
+    if (s.needs_installer) {
+      section.insertBefore(el('p', 'upd-warn', 'This update changes the voice engine, so the app downloads and installs the full installer for you this one time. Your projects are kept.'), actions);
     }
     if (!s.can_self_update) {
       section.insertBefore(el('p', 'upd-warn', 'Updates install from the desktop app. (Running from source: use git pull.)'), actions);
@@ -102,7 +107,18 @@ function renderUpdateSection(body, info, { showLater }) {
       fill.style.width = `${Math.round((dl.progress || 0) * 100)}%`;
       bar.appendChild(fill);
       section.insertBefore(bar, actions);
-      actions.appendChild(el('span', 'upd-muted', dl.state === 'verifying' ? 'Checking the download…' : `Downloading… ${Math.round((dl.progress || 0) * 100)}%`));
+      const pct = Math.round((dl.progress || 0) * 100);
+      const mb = dl.total ? ` (${(dl.done / 1e6).toFixed(0)} / ${(dl.total / 1e6).toFixed(0)} MB)` : '';
+      actions.appendChild(el('span', 'upd-muted', dl.state === 'verifying' ? 'Checking the download…' : `Downloading… ${pct}%${mb}`));
+      return;
+    }
+    if (dl.state === 'installing') {
+      const bar = el('div', 'upd-progress');
+      const fill = el('div', 'upd-progress-fill');
+      fill.style.width = '100%';
+      bar.appendChild(fill);
+      section.insertBefore(bar, actions);
+      actions.appendChild(el('span', 'upd-muted', 'Installing… the app closes and reopens by itself.'));
       return;
     }
     if (dl.state === 'ready') {
@@ -131,13 +147,21 @@ function renderUpdateSection(body, info, { showLater }) {
       poll();
     });
     actions.appendChild(go);
+    if (s.needs_installer) {
+      const link = el('a', 'upd-muted', 'or download it from GitHub');
+      link.href = s.installer_url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      section.appendChild(link);
+    }
   };
 
   const poll = () => {
     clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
       const s = await api.status(false).catch(() => null);
-      if (!s || !modal) return;
+      if (!s) return; // app is closing to install: keep showing "Installing…"
+      if (!modal) return;
       render(s);
       if (s.download.state === 'ready') {
         clearInterval(pollTimer);
@@ -149,7 +173,7 @@ function renderUpdateSection(body, info, { showLater }) {
   };
 
   render(info);
-  if (['downloading', 'verifying'].includes(info.download?.state)) poll();
+  if (['downloading', 'verifying', 'installing'].includes(info.download?.state)) poll();
 }
 
 async function doRestart(section) {

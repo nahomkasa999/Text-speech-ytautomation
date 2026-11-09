@@ -288,17 +288,37 @@ jobs:
   publish-update:
     needs: [update, build, release]
     # If the engine changed, wait until the new installer is released, so the
-    # "needs the full installer" link never points at an old installer.
+    # installer fields in update.json never point at an old installer.
     if: >-
       always() && needs.update.result == 'success' &&
       (needs.update.outputs.engine_changed != 'true' || needs.release.result == 'success')
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository (for the manifest script)
+        uses: actions/checkout@v4
+
       - name: Download update files
         uses: actions/download-artifact@v4
         with:
           name: update-channel
           path: update-channel
+
+      # Only when this run released a new installer: add its direct URL, size
+      # and SHA-256 to update.json so the app can download and install it itself.
+      - name: Download the new installer (if one was built)
+        if: needs.release.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: BookNarrator-*
+          path: release
+          merge-multiple: true
+
+      - name: Add installer details to update.json
+        run: |
+          python3 scripts/add_installer_to_manifest.py \
+            --manifest update-channel/update.json \
+            --search-dir release \
+            --repo "${{ github.repository }}"
 
       - name: Publish to the "updates" release
         uses: softprops/action-gh-release@v2
