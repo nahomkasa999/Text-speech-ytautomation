@@ -100,19 +100,15 @@ class RoutingTests(unittest.TestCase):
         res, inst, pkg = self.start(manifest(), False)
         self.assertTrue(res["ok"]); pkg.assert_called_once(); inst.assert_not_called()
 
-    def test_missing_fields_fall_back(self):
+    def test_missing_fields_refuse_without_a_web_link(self):
         m = manifest(); del m["installer_sha256"]
         res, inst, pkg = self.start(m, True)
-        self.assertFalse(res["ok"]); self.assertIn("installer_url", res)
+        self.assertFalse(res["ok"]); self.assertNotIn("installer_url", res)
         inst.assert_not_called()
 
     def test_non_windows_falls_back(self):
         res, inst, _ = self.start(manifest(), True, platform="linux")
         self.assertFalse(res["ok"]); inst.assert_not_called()
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class EnginePatchTests(unittest.TestCase):
@@ -149,3 +145,135 @@ class EnginePatchTests(unittest.TestCase):
             m = aim.apply({"version": "1.0.2", "engine": "new"}, str(out), "o/r")
             self.assertEqual(m["engine_patch"]["base_engine"], "old")
             self.assertNotIn("installer_url", m)  # no installer in this dir
+
+
+class CarryForwardTests(unittest.TestCase):
+    PREV = {"version": "1.0.18", "engine": "E", "installer_url": "https://x/v1.0.18/BookNarrator-Setup-1.0.18.exe",
+            "installer_size": 400, "installer_sha256": "s1", "linux_url": "https://x/l.tar.gz", "linux_size": 450,
+            "linux_sha256": "s2", "engine_patch": {"url": "p", "size": 5, "sha256": "s3", "base_engine": "OLD"}}
+
+    def test_same_engine_keeps_previous_entries(self):
+        m = aim.apply({"version": "1.0.19", "engine": "E"}, "", "o/r", self.PREV)
+        self.assertEqual(m["installer_url"], self.PREV["installer_url"])
+        self.assertEqual(m["installer_version"], "1.0.18")
+        self.assertEqual(m["linux_version"], "1.0.18")
+        self.assertEqual(m["engine_patch"]["version"], "1.0.18")
+        # and once more: the original version is kept, not the carrying one
+        m2 = aim.apply({"version": "1.0.20", "engine": "E"}, "", "o/r", m)
+        self.assertEqual(m2["installer_version"], "1.0.18")
+        self.assertEqual(m2["engine_patch"]["version"], "1.0.18")
+
+    def test_other_engine_drops_everything(self):
+        m = aim.apply({"version": "1.0.19", "engine": "NEW"}, "", "o/r", self.PREV)
+        for k in ("installer_url", "linux_url", "engine_patch"):
+            self.assertNotIn(k, m)
+
+    def test_new_build_wins_over_previous(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "BookNarrator-Setup-1.0.19.exe").write_bytes(DATA)
+            Path(d, "BookNarrator-Linux-1.0.19.tar.gz").write_bytes(DATA)
+            m = aim.apply({"version": "1.0.19", "engine": "E"}, d, "o/r", self.PREV)
+            self.assertEqual(m["installer_version"], "1.0.19")
+            self.assertEqual(m["installer_sha256"], SHA)
+            self.assertEqual(m["linux_version"], "1.0.19")
+            self.assertTrue(m["linux_url"].endswith("/v1.0.19/BookNarrator-Linux-1.0.19.tar.gz"))
+
+
+class LinuxTests(unittest.TestCase):
+    def test_linux_routes_to_bundle(self):
+        m = manifest(linux_url="u", linux_size=5, linux_sha256="a")
+        with patch.object(updater.sys, "platform", "linux"):
+            self.assertEqual(updater.engine_update_route(m)["kind"], "linux_bundle")
+        with patch.object(updater.sys, "platform", "win32"):
+            self.assertEqual(updater.engine_update_route(m)["kind"], "installer")
+
+    def test_script_waits_copies_restarts(self):
+        s = updater.build_linux_script(42, "/d/stage/book narrator", "/opt/bn", "book-narrator", ["/d/stage"])
+        self.assertIn("kill -0 42", s)
+        self.assertIn("'/d/stage/book narrator'/. /opt/bn/", s)
+        self.assertLess(s.index("cp -a"), s.index("nohup"))
+        self.assertLess(s.index("rm -rf /d/stage"), s.index("nohup"))
+
+    def make_tar(self, d, version="1.0.18", engine="new"):
+        import tarfile as tf, io
+        src = Path(d, "src", "book-narrator"); (src / "_internal").mkdir(parents=True)
+        (src / "book-narrator").write_bytes(b"elf")
+        (src / "_internal" / "version.json").write_text(json.dumps({"version": version, "engine": engine}))
+        out = Path(d, "b.tar.gz")
+        with tf.open(out, "w:gz") as t:
+            t.add(src, arcname="book-narrator")
+        return out.read_bytes()
+
+    def run_bundle(self, data, **kw):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as inst, \
+             patch.object(updater.app_boot, "app_root", return_value=d), \
+             patch.object(updater.sys, "executable", os.path.join(inst, "book-narrator")), \
+             patch.object(updater, "_stream_to_file") as stream, \
+             patch.object(updater, "_launch_linux_helper") as launch, \
+             patch.object(updater.time, "sleep"):
+            def fake(url, part, size):
+                Path(part).write_bytes(data)
+                return len(data), hashlib.sha256(data).hexdigest()
+            stream.side_effect = fake
+            m = manifest(linux_url="u", linux_size=len(data), linux_sha256=hashlib.sha256(data).hexdigest(),
+                         linux_version="1.0.18", **kw)
+            updater._run_linux_bundle(m)
+            st = dict(updater._download)
+            bundle = launch.call_args[0][0] if launch.called else None
+            ok_bundle = bool(bundle and os.path.isfile(os.path.join(bundle, "book-narrator")))
+            return launch, st, ok_bundle, os.listdir(d)
+
+    def test_good_bundle_launches_helper(self):
+        with tempfile.TemporaryDirectory() as t:
+            data = self.make_tar(t)
+        launch, st, ok_bundle, _ = self.run_bundle(data)
+        launch.assert_called_once()
+        self.assertTrue(ok_bundle)
+        self.assertEqual(st["state"], "installing")
+
+    def test_wrong_engine_refuses(self):
+        with tempfile.TemporaryDirectory() as t:
+            data = self.make_tar(t, engine="other")
+        launch, st, _, left = self.run_bundle(data)
+        launch.assert_not_called()
+        self.assertEqual(st["state"], "error")
+        self.assertEqual(left, [])
+
+
+class ResumeTests(unittest.TestCase):
+    def test_engine_patch_version_from_patch_entry(self):
+        m = manifest(version="1.0.19", engine_patch={"url": "u", "size": 5, "sha256": "a", "base_engine": "old",
+                                                      "version": "1.0.18"})
+        with patch.object(updater.sys, "platform", "win32"), \
+             patch.object(updater, "base_info", return_value={"engine": "old"}), \
+             patch.object(updater.app_boot, "app_root", return_value=tempfile.mkdtemp()), \
+             patch.object(updater, "_stream_to_file", side_effect=RuntimeError("stop")) as stream:
+            updater._run_engine_patch(m)
+            self.assertIn("EnginePatch-1.0.18.zip", stream.call_args[0][1])
+
+    def test_confirm_resumes_small_update_once(self):
+        state = {"failed": [], "active": None, "pending": None, "trying": None, "previous": None,
+                 "continue_update": True}
+        saved = {}
+        with patch.object(updater.sys, "frozen", True, create=True), \
+             patch.object(updater, "current_info", return_value={"version": "1.0.18"}), \
+             patch.object(updater.app_boot, "load_state", return_value=state), \
+             patch.object(updater.app_boot, "save_state", side_effect=lambda s: saved.update(s)), \
+             patch.object(updater.threading, "Thread") as T:
+            updater.confirm_running_version()
+            self.assertNotIn("continue_update", saved)
+            T.assert_called_once()
+
+    def test_resume_never_chains_an_engine_update(self):
+        with patch.object(updater, "status", return_value={"update_available": True, "needs_installer": True}), \
+             patch.object(updater, "start_download") as sd:
+            updater._resume_small_update()
+            sd.assert_not_called()
+
+    def test_clean_env_drops_overlay(self):
+        with patch.dict(os.environ, {"BOOKNARRATOR_APP_DIR": "/old"}):
+            self.assertNotIn("BOOKNARRATOR_APP_DIR", updater._clean_env())
+
+
+if __name__ == "__main__":
+    unittest.main()

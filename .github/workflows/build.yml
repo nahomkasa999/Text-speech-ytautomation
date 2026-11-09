@@ -329,10 +329,14 @@ jobs:
         run: |
           # Keep the file list of this engine so the next engine patch can diff against it.
           [ -f release/engine-files.json ] && cp release/engine-files.json update-channel/ || true
+          # The currently published manifest: its installer/tarball/patch entries are
+          # carried forward when this run did not build new ones for the same engine.
+          curl -fsSL -o prev-update.json "https://github.com/${{ github.repository }}/releases/download/updates/update.json" || rm -f prev-update.json
           python3 scripts/add_installer_to_manifest.py \
             --manifest update-channel/update.json \
             --search-dir release \
-            --repo "${{ github.repository }}"
+            --repo "${{ github.repository }}" \
+            --previous prev-update.json
 
       - name: Publish to the "updates" release
         uses: softprops/action-gh-release@v2
