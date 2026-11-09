@@ -18,6 +18,8 @@ jobs:
   native:
     runs-on: ${{ matrix.os }}
     strategy:
+      # Run Windows and Linux to the end even if one fails (the Windows job also builds the app).
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:

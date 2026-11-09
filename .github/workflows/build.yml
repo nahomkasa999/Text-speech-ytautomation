@@ -7,6 +7,8 @@ name: Build Desktop Apps (Windows installer + portable exe, Linux)
 # - Full installers (Setup.exe, portable exe, Linux) are built and released when:
 #   you run this workflow by hand, push a v* tag, or a push changes the engine
 #   (requirements.txt, book_narrator.spec, app_boot.py or desktop.py).
+# - Engine updates are in-app too: installed apps download only the engine
+#   files that changed (never the voice model) from BookNarrator-Engine-*.zip.
 
 on:
   push:
@@ -56,6 +58,9 @@ permissions:
 env:
   APP_NAME: ${{ github.event.inputs.app_name || 'book-narrator' }}
   BUNDLE_MODELS: ${{ github.event.inputs.bundle_models || 'true' }}
+  # Engine of the v1.0.16 installs. Every release also publishes a small
+  # "bridge" package for it, so those installs update in-app (see src/updater.py).
+  LEGACY_ENGINE: f750610b0c851c73
   SHOW_CONSOLE: ${{ github.event.inputs.show_console || 'false' }}
   MODEL_URL: ${{ github.event.inputs.model_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx' }}
   VOICES_URL: ${{ github.event.inputs.voices_url || 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin' }}
@@ -92,14 +97,15 @@ jobs:
             --version "${{ steps.ver.outputs.version }}" \
             --build "${{ steps.ver.outputs.build }}" \
             --repo "${{ github.repository }}" \
-            --notes "${NOTES:-$(git log -1 --format=%B)}"
+            --notes "${NOTES:-$(git log -1 --format=%B)}" \
+            --legacy-engine "${LEGACY_ENGINE}"
 
       - name: Did the engine change? (then users need the full installer)
         id: engine
         shell: bash
         run: |
           published=$(curl -fsSL "https://github.com/${{ github.repository }}/releases/download/updates/update.json" 2>/dev/null \
-            | python3 -c "import json,sys; print(json.load(sys.stdin).get('engine',''))" 2>/dev/null || true)
+            | python3 -c "import json,sys; m=json.load(sys.stdin); print(m.get('engine_target') or m.get('engine',''))" 2>/dev/null || true)
           echo "published engine: '${published}', new engine: '${{ steps.pkg.outputs.engine }}'"
           if [[ "${published}" != "${{ steps.pkg.outputs.engine }}" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -233,16 +239,15 @@ jobs:
           cp "dist/portable/${APP_NAME}.exe" "release/BookNarrator-Portable-${APP_VERSION}.exe"
           ls -la release
 
-      # Small engine patch: only the files that differ from the previous engine
-      # release (so installed apps do not need the whole ~400 MB installer).
-      - name: Build engine patch (Windows)
+      # Engine bundle: the app folder without the voice model, plus a per-file
+      # list. Installed apps download only the files that differ from theirs.
+      - name: Build engine bundle (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          curl -fsSL -o prev-engine-files.json "https://github.com/${{ github.repository }}/releases/download/updates/engine-files.json" || rm -f prev-engine-files.json
-          ENGINE=$(python3 -c "import json;print(json.load(open('version.json'))['engine'])")
-          python3 scripts/make_engine_patch.py --dist "dist/${APP_NAME}" --version "${APP_VERSION}" \
-            --engine "$ENGINE" --prev prev-engine-files.json --out release
+          ENGINE=$(python -c "import json;print(json.load(open('version.json'))['engine'])")
+          python scripts/make_engine_bundle.py --dist "dist/${APP_NAME}" --platform windows \
+            --version "${APP_VERSION}" --engine "$ENGINE" --out release
           ls -la release
 
       # ---- Linux: folder bundle ----
@@ -257,6 +262,9 @@ jobs:
         run: |
           mkdir -p release
           tar -czf "release/BookNarrator-Linux-${APP_VERSION}.tar.gz" -C dist "${APP_NAME}"
+          ENGINE=$(python -c "import json;print(json.load(open('version.json'))['engine'])")
+          python scripts/make_engine_bundle.py --dist "dist/${APP_NAME}" --platform linux \
+            --version "${APP_VERSION}" --engine "$ENGINE" --out release
           ls -la release
 
       - name: Upload build artifact
@@ -327,12 +335,14 @@ jobs:
 
       - name: Add installer details to update.json
         run: |
-          # Keep the file list of this engine so the next engine patch can diff against it.
-          [ -f release/engine-files.json ] && cp release/engine-files.json update-channel/ || true
+          # The currently published manifest: its installer/tarball/patch entries are
+          # carried forward when this run did not build new ones for the same engine.
+          curl -fsSL -o prev-update.json "https://github.com/${{ github.repository }}/releases/download/updates/update.json" || rm -f prev-update.json
           python3 scripts/add_installer_to_manifest.py \
             --manifest update-channel/update.json \
             --search-dir release \
-            --repo "${{ github.repository }}"
+            --repo "${{ github.repository }}" \
+            --previous prev-update.json
 
       - name: Publish to the "updates" release
         uses: softprops/action-gh-release@v2

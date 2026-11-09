@@ -130,6 +130,15 @@ a = Analysis(
     noarchive=False,
 )
 
+# imageio-ffmpeg's hook also bundles the wheel's own copy of FFmpeg (80 MB).
+# The app only runs the copy in ffmpeg/ (src/ffmpeg_runtime.py), so drop the duplicate.
+def _not_wheel_ffmpeg(entry):
+    return not entry[0].replace('\\', '/').startswith('imageio_ffmpeg/binaries')
+
+
+a.datas = [e for e in a.datas if _not_wheel_ffmpeg(e)]
+a.binaries = [e for e in a.binaries if _not_wheel_ffmpeg(e)]
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 if ONEFILE:

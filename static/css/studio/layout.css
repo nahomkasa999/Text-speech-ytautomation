@@ -330,6 +330,8 @@
 .upd-error { margin: 10px 0 0; color: var(--accent-danger); }
 .upd-progress { height: 6px; margin-top: 12px; border-radius: 99px; background: var(--bg-hover); overflow: hidden; }
 .upd-progress-fill { height: 100%; background: var(--accent-blue); transition: width 0.3s ease; }
+.upd-progress-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.upd-progress-row .upd-muted { margin-right: 0; }
 
 /* ---------- Wave colours ---------- */
 .wave-color-row { display: flex; align-items: center; gap: 10px; }

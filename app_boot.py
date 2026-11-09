@@ -110,6 +110,9 @@ def select_app_code() -> dict:
     """
     if not getattr(sys, "frozen", False):
         return {"version": None, "dir": None, "trying": False}
+    # Never trust a choice inherited from the process that launched us
+    # (e.g. an installer started by an older version).
+    os.environ.pop("BOOKNARRATOR_APP_DIR", None)
 
     base = base_version_info()
     state = load_state()

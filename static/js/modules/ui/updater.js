@@ -25,6 +25,13 @@ function fmtSize(bytes) {
   return bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`;
 }
 
+/** "12.4 / 33.5 MB" or "201 / 544 KB": both numbers in the unit of the total. */
+function fmtProgress(done, total) {
+  if (!total) return done ? fmtSize(done) : '';
+  if (total >= 1e6) return `${(done / 1e6).toFixed(1)} / ${(total / 1e6).toFixed(1)} MB`;
+  return `${Math.round(done / 1e3)} / ${Math.max(1, Math.round(total / 1e3))} KB`;
+}
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -75,32 +82,45 @@ function renderUpdateSection(body, info, { showLater }) {
     }
 
     const card = el('div', 'upd-card');
-    card.appendChild(el('div', 'upd-card-title', `Version ${latest.version} is available${(s.download_size || latest.size) ? ` (${fmtSize(s.download_size || latest.size)})` : ''}`));
+    const size = s.download_size || latest.size;
+    // An engine update downloads only the files that changed: say "up to".
+    const sizeText = size ? ` (${s.size_is_max ? 'up to ' : ''}${fmtSize(size)})` : '';
+    // Already on the newest app code, only the engine is behind (e.g. after the 1.0.16 bridge).
+    const title = s.needs_engine && latest.version === s.current?.version
+      ? 'Finish the update' : `Version ${latest.version} is available`;
+    card.appendChild(el('div', 'upd-card-title', `${title}${sizeText}`));
     if (latest.notes) card.appendChild(el('p', 'upd-notes', latest.notes));
     section.appendChild(card);
 
     const actions = el('div', 'upd-actions');
     section.appendChild(actions);
 
-    // Fallback: no installer file in the manifest (or not Windows): GitHub page.
-    const manualOnly = s.needs_installer && !s.installer_in_app;
-    if (manualOnly) {
-      section.insertBefore(el('p', 'upd-warn', 'This update changes the voice engine, so it needs the full installer this one time.'), actions);
-      const a = el('a', 'btn btn-primary btn-sm', 'Download installer');
-      a.href = s.installer_url;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      actions.appendChild(a);
-      return;
-    }
-    if (s.needs_installer) {
-      section.insertBefore(el('p', 'upd-warn', 'This update changes the voice engine, so the app downloads and installs the engine update for you this one time. Your projects are kept.'), actions);
-    }
+    // Everything installs inside the app; we never send the user to a web page.
     if (!s.can_self_update) {
-      section.insertBefore(el('p', 'upd-warn', 'Updates install from the desktop app. (Running from source: use git pull.)'), actions);
+      section.insertBefore(el('p', 'upd-warn', 'This copy is running from source (version dev), so it can\'t update itself. Use git pull, or install the desktop app.'), actions);
       return;
+    }
+    if (s.needs_engine && !s.in_app) {
+      section.insertBefore(el('p', 'upd-warn', 'This update includes an engine update that can\'t be installed from inside the app on this system yet.'), actions);
+      return;
+    }
+    if (s.needs_engine) {
+      section.insertBefore(el('p', 'upd-warn', s.kind === 'engine_sync'
+        ? 'This update includes an engine update. Only the files that changed are downloaded (never the voice model). The app closes and reopens by itself. Your projects are kept.'
+        : 'This update includes an engine update, so the download is bigger this time. The app closes and reopens by itself. Your projects are kept.'), actions);
     }
 
+    if (dl.state === 'checking') {
+      const bar = el('div', 'upd-progress');
+      const fill = el('div', 'upd-progress-fill');
+      fill.style.width = `${Math.round((dl.progress || 0) * 100)}%`;
+      bar.appendChild(fill);
+      section.insertBefore(bar, actions);
+      const row = el('div', 'upd-progress-row');
+      row.append(el('span', 'upd-muted', 'Checking which files changed…'));
+      section.insertBefore(row, actions);
+      return;
+    }
     if (dl.state === 'downloading' || dl.state === 'verifying') {
       const bar = el('div', 'upd-progress');
       const fill = el('div', 'upd-progress-fill');
@@ -108,8 +128,10 @@ function renderUpdateSection(body, info, { showLater }) {
       bar.appendChild(fill);
       section.insertBefore(bar, actions);
       const pct = Math.round((dl.progress || 0) * 100);
-      const mb = dl.total ? ` (${(dl.done / 1e6).toFixed(0)} / ${(dl.total / 1e6).toFixed(0)} MB)` : '';
-      actions.appendChild(el('span', 'upd-muted', dl.state === 'verifying' ? 'Checking the download…' : `Downloading… ${pct}%${mb}`));
+      const row = el('div', 'upd-progress-row');
+      row.append(el('span', 'upd-muted', dl.state === 'verifying' ? 'Checking the download…' : `${pct}%`),
+                 el('span', 'upd-muted', fmtProgress(dl.done || 0, dl.total || 0)));
+      section.insertBefore(row, actions);
       return;
     }
     if (dl.state === 'installing') {
@@ -136,10 +158,10 @@ function renderUpdateSection(body, info, { showLater }) {
       later.addEventListener('click', () => { dismissedThisSession = true; closeModal(); });
       actions.appendChild(later);
     }
-    const go = el('button', 'btn btn-primary btn-sm', dl.state === 'error' ? 'Try again' : 'Update now');
+    const go = el('button', 'btn btn-primary btn-sm', dl.state === 'error' ? 'Try again' : 'Update');
     go.addEventListener('click', async () => {
       go.disabled = true;
-      const res = await api.download();
+      const res = await api.download().catch(() => ({ ok: false, error: 'Could not start the update.' }));
       if (!res.ok) {
         render({ ...s, download: { state: 'error', error: res.error } });
         return;
@@ -147,21 +169,18 @@ function renderUpdateSection(body, info, { showLater }) {
       poll();
     });
     actions.appendChild(go);
-    if (s.needs_installer) {
-      const link = el('a', 'upd-muted', 'or download it from GitHub');
-      link.href = s.installer_url;
-      link.target = '_blank';
-      link.rel = 'noopener';
-      section.appendChild(link);
-    }
   };
 
+  let shown = '';
   const poll = () => {
     clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
       const s = await api.status(false).catch(() => null);
       if (!s) return; // app is closing to install: keep showing "Installing…"
       if (!modal) return;
+      const key = JSON.stringify([s.update_available, s.kind, s.download]);
+      if (key === shown) return; // nothing new: keep the buttons as they are
+      shown = key;
       render(s);
       if (s.download.state === 'ready') {
         clearInterval(pollTimer);
@@ -173,7 +192,10 @@ function renderUpdateSection(body, info, { showLater }) {
   };
 
   render(info);
-  if (['downloading', 'verifying', 'installing'].includes(info.download?.state)) poll();
+  shown = JSON.stringify([info.update_available, info.kind, info.download]);
+  // Keep watching while the dialog is open: an update may also start by itself
+  // (right after the 1.0.16 bridge, or after an engine update).
+  if (info.update_available && info.can_self_update) poll();
 }
 
 async function doRestart(section) {
@@ -224,7 +246,11 @@ async function backgroundCheck() {
   if (dismissedThisSession || modal) return;
   try {
     const info = await api.status(true);
-    if (info.update_available && !dismissedThisSession && !modal) showUpdatePrompt(info);
+    // Pop up when there is something to install here, or when an update is
+    // already downloading (e.g. finishing up right after an engine update).
+    const busy = ['checking', 'downloading', 'verifying', 'installing', 'ready'].includes(info.download?.state);
+    if (info.update_available && info.can_self_update && !dismissedThisSession && !modal) showUpdatePrompt(info);
+    else if (busy && !modal) showUpdatePrompt(info);
   } catch (e) { /* offline: try again later */ }
 }
 
