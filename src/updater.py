@@ -195,9 +195,12 @@ def status(force_check: bool = False) -> dict:
         "kind": plan["kind"],
         "needs_engine": plan["needs_engine"],
         "in_app": bool(plan["kind"]),
-        # Older UI names, kept so either UI version can read this.
-        "needs_installer": plan["needs_engine"],
+        # For an older UI that may still be on screen (a cached 1.0.16 window):
+        # it only knows "needs_installer" (shows a link) or not (shows "Update now",
+        # which calls start_download, so the update still happens in-app).
+        "needs_installer": bool(plan["needs_engine"] and not plan["kind"]),
         "installer_in_app": bool(plan["needs_engine"] and plan["kind"]),
+        "installer_url": INSTALLER_PAGE,
         "download_size": plan["size"],
         "size_is_max": bool(plan.get("size_is_max")),
         "latest": {
