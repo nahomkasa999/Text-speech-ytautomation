@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Add the full-installer fields to update.json (run in the publish-update job).
+Add the full-installer fields (and the small engine_patch entry, if one was
+built) to update.json (run in the publish-update job).
 
 Looks for BookNarrator-Setup-<version>.exe in --search-dir. Only if that exact
 file exists (a new installer was built for THIS manifest version) are
@@ -15,11 +16,41 @@ import hashlib
 import json
 import os
 import sys
+import zipfile
+
+
+def add_engine_patch(manifest: dict, search_dir: str, repo: str) -> None:
+    """engine_patch: only when BookNarrator-EnginePatch-<version>.zip exists for THIS version."""
+    manifest.pop("engine_patch", None)
+    version = str(manifest["version"])
+    name = f"BookNarrator-EnginePatch-{version}.zip"
+    path = os.path.join(search_dir, name) if search_dir else ""
+    if not os.path.isfile(path):
+        return
+    try:
+        with zipfile.ZipFile(path) as zf:
+            info = json.loads(zf.read("patch.json"))
+    except Exception:
+        return
+    if str(info.get("version")) != version or info.get("engine") != manifest.get("engine"):
+        return
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    manifest["engine_patch"] = {
+        "url": f"https://github.com/{repo}/releases/download/v{version}/{name}",
+        "size": os.path.getsize(path),
+        "sha256": h.hexdigest(),
+        "base_engine": info["base_engine"],
+        "base_version": info.get("base_version"),
+    }
 
 
 def apply(manifest: dict, search_dir: str, repo: str) -> dict:
     for key in ("installer_url", "installer_size", "installer_sha256"):
         manifest.pop(key, None)
+    add_engine_patch(manifest, search_dir, repo)
     version = str(manifest["version"])
     name = f"BookNarrator-Setup-{version}.exe"
     path = os.path.join(search_dir, name) if search_dir else ""

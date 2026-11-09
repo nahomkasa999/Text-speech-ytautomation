@@ -75,7 +75,7 @@ function renderUpdateSection(body, info, { showLater }) {
     }
 
     const card = el('div', 'upd-card');
-    card.appendChild(el('div', 'upd-card-title', `Version ${latest.version} is available${latest.size ? ` (${fmtSize(latest.size)})` : ''}`));
+    card.appendChild(el('div', 'upd-card-title', `Version ${latest.version} is available${(s.download_size || latest.size) ? ` (${fmtSize(s.download_size || latest.size)})` : ''}`));
     if (latest.notes) card.appendChild(el('p', 'upd-notes', latest.notes));
     section.appendChild(card);
 
@@ -94,7 +94,7 @@ function renderUpdateSection(body, info, { showLater }) {
       return;
     }
     if (s.needs_installer) {
-      section.insertBefore(el('p', 'upd-warn', 'This update changes the voice engine, so the app downloads and installs the full installer for you this one time. Your projects are kept.'), actions);
+      section.insertBefore(el('p', 'upd-warn', 'This update changes the voice engine, so the app downloads and installs the engine update for you this one time. Your projects are kept.'), actions);
     }
     if (!s.can_self_update) {
       section.insertBefore(el('p', 'upd-warn', 'Updates install from the desktop app. (Running from source: use git pull.)'), actions);

@@ -113,3 +113,39 @@ class RoutingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EnginePatchTests(unittest.TestCase):
+    def test_patch_routing_and_base_engine(self):
+        m = manifest(engine_patch={"url": "u", "size": 5, "sha256": "a", "base_engine": "old"})
+        with patch.object(updater.sys, "platform", "win32"), \
+             patch.object(updater, "base_info", return_value={"engine": "old"}):
+            self.assertIsNotNone(updater.engine_patch_for_this_install(m))
+        with patch.object(updater.sys, "platform", "win32"), \
+             patch.object(updater, "base_info", return_value={"engine": "other"}):
+            self.assertIsNone(updater.engine_patch_for_this_install(m))  # too old: full installer
+
+    def test_script_waits_copies_removes_restarts(self):
+        s = updater.build_patch_script(42, "C:\\a\\stage", "C:\\i", "book-narrator.exe", ["_internal/old.dll"], ["C:\\a\\stage"])
+        self.assertIn('PID eq 42', s)
+        self.assertLess(s.index("robocopy"), s.index("old.dll"))
+        self.assertLess(s.index("old.dll"), s.index("start"))
+
+    def test_patch_build_and_manifest(self):
+        import make_engine_patch as mep, zipfile as zf
+        with tempfile.TemporaryDirectory() as d:
+            dist = Path(d, "dist"); (dist / "_internal").mkdir(parents=True)
+            (dist / "a.exe").write_bytes(b"new"); (dist / "_internal" / "big.bin").write_bytes(b"same")
+            prev = {"version": "1.0.1", "engine": "old", "files": {
+                "a.exe": [3, "x"], "_internal/big.bin": [4, hashlib.sha256(b"same").hexdigest()], "_internal/gone.dll": [1, "y"]}}
+            Path(d, "prev.json").write_text(json.dumps(prev))
+            out = Path(d, "out")
+            with patch.object(sys, "argv", ["x", "--dist", str(dist), "--version", "1.0.2", "--engine", "new",
+                                            "--prev", str(Path(d, "prev.json")), "--out", str(out)]):
+                mep.main()
+            z = zf.ZipFile(out / "BookNarrator-EnginePatch-1.0.2.zip")
+            self.assertEqual(sorted(z.namelist()), ["files/a.exe", "patch.json"])  # big file left out
+            self.assertEqual(json.loads(z.read("patch.json"))["remove"], ["_internal/gone.dll"])
+            m = aim.apply({"version": "1.0.2", "engine": "new"}, str(out), "o/r")
+            self.assertEqual(m["engine_patch"]["base_engine"], "old")
+            self.assertNotIn("installer_url", m)  # no installer in this dir

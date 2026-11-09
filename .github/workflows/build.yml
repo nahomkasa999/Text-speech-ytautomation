@@ -233,6 +233,18 @@ jobs:
           cp "dist/portable/${APP_NAME}.exe" "release/BookNarrator-Portable-${APP_VERSION}.exe"
           ls -la release
 
+      # Small engine patch: only the files that differ from the previous engine
+      # release (so installed apps do not need the whole ~400 MB installer).
+      - name: Build engine patch (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -fsSL -o prev-engine-files.json "https://github.com/${{ github.repository }}/releases/download/updates/engine-files.json" || rm -f prev-engine-files.json
+          ENGINE=$(python3 -c "import json;print(json.load(open('version.json'))['engine'])")
+          python3 scripts/make_engine_patch.py --dist "dist/${APP_NAME}" --version "${APP_VERSION}" \
+            --engine "$ENGINE" --prev prev-engine-files.json --out release
+          ls -la release
+
       # ---- Linux: folder bundle ----
       - name: Build app folder (Linux)
         if: runner.os == 'Linux'
@@ -315,6 +327,8 @@ jobs:
 
       - name: Add installer details to update.json
         run: |
+          # Keep the file list of this engine so the next engine patch can diff against it.
+          [ -f release/engine-files.json ] && cp release/engine-files.json update-channel/ || true
           python3 scripts/add_installer_to_manifest.py \
             --manifest update-channel/update.json \
             --search-dir release \

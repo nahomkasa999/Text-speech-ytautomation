@@ -14,9 +14,15 @@ installed in place. On Windows the app then downloads the full installer
 itself (size + SHA-256 verified), runs it silently and quits; the installer
 reopens the app. Elsewhere, or if the manifest has no installer file, the UI
 falls back to the GitHub releases page.
+
+Even better, when the manifest has an "engine_patch" built against the engine
+this install already has, only the files that changed (usually far less than
+the 400 MB installer) are downloaded; a small helper script swaps them in
+after the app closes and reopens it.
 """
 
 import hashlib
+import json
 import os
 import shutil
 import sys
@@ -74,8 +80,17 @@ def has_installer_fields(manifest: Optional[dict]) -> bool:
                 and m.get("installer_url") != INSTALLER_PAGE)
 
 
+def engine_patch_for_this_install(manifest: Optional[dict]) -> Optional[dict]:
+    """The manifest's engine patch if it applies to the engine installed here."""
+    p = (manifest or {}).get("engine_patch") or {}
+    if not (sys.platform == "win32" and p.get("url") and p.get("sha256") and int(p.get("size") or 0) > 0):
+        return None
+    base = base_info().get("engine")
+    return p if base and p.get("base_engine") == base else None
+
+
 def can_install_in_app(manifest: Optional[dict]) -> bool:
-    return sys.platform == "win32" and has_installer_fields(manifest)
+    return bool(engine_patch_for_this_install(manifest)) or (sys.platform == "win32" and has_installer_fields(manifest))
 
 
 def status(force_check: bool = False) -> dict:
@@ -98,6 +113,10 @@ def status(force_check: bool = False) -> dict:
         "installer_url": INSTALLER_PAGE,
         "installer_in_app": bool(available and needs_installer and can_install_in_app(manifest)),
         "installer_size": int((manifest or {}).get("installer_size") or 0),
+        # What an engine update will actually download (patch if it applies, else installer).
+        "download_size": (int((engine_patch_for_this_install(manifest) or {}).get("size") or 0)
+                          or int((manifest or {}).get("installer_size") or 0)) if needs_installer else int((manifest or {}).get("size") or 0),
+        "engine_patch": bool(needs_installer and engine_patch_for_this_install(manifest)),
         "latest": {
             "version": manifest.get("version"),
             "build": manifest.get("build"),
@@ -155,6 +174,86 @@ def _launch_installer(path: str) -> None:
         kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     subprocess.Popen([path] + INSTALLER_ARGS, **kwargs)
     os._exit(0)
+
+
+def build_patch_script(pid: int, staging: str, install_dir: str, exe_name: str, remove: list, cleanup: list) -> str:
+    """cmd script: wait for the app to exit, copy the patched files over the
+    install, delete removed files, reopen the app. No rollback (see _launch_installer)."""
+    lines = [
+        "@echo off",
+        ":wait",
+        f'tasklist /FI "PID eq {pid}" 2>NUL | find " {pid} " >NUL',
+        "if not errorlevel 1 (",
+        "  ping -n 2 127.0.0.1 >NUL",
+        "  goto wait",
+        ")",
+        f'robocopy "{staging}\\files" "{install_dir}" /E /IS /IT /R:15 /W:1 /NFL /NDL /NJH /NJS /NP >NUL',
+        "if errorlevel 8 echo engine patch copy failed >> \"%~dp0engine-update.log\"",
+    ]
+    for rel in remove:
+        lines.append(f'del /F /Q "{os.path.join(install_dir, *rel.split("/"))}" 2>NUL')
+    lines.append(f'start "" "{os.path.join(install_dir, exe_name)}"')
+    for path in cleanup:
+        lines.append(f'rmdir /S /Q "{path}" 2>NUL' if os.path.isdir(path) else f'del /F /Q "{path}" 2>NUL')
+    lines.append('(goto) 2>NUL & del "%~f0"')
+    return "\r\n".join(lines) + "\r\n"
+
+
+def _launch_patch_helper(staging: str, patch_zip: str, remove: list) -> None:
+    import subprocess
+    install_dir = os.path.dirname(sys.executable)
+    root = app_boot.app_root()
+    script = os.path.join(root, "apply-engine-patch.cmd")
+    with open(script, "w", encoding="utf-8", newline="") as f:
+        f.write(build_patch_script(os.getpid(), staging, install_dir, os.path.basename(sys.executable),
+                                   remove, [staging, patch_zip]))
+    # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen(["cmd.exe", "/c", script], close_fds=True, creationflags=0x08000000 | 0x00000200)
+    os._exit(0)
+
+
+def _run_engine_patch(manifest: dict) -> None:
+    patch = engine_patch_for_this_install(manifest) or {}
+    version = str(manifest["version"])
+    root = app_boot.app_root()
+    part = os.path.join(root, f"EnginePatch-{version}.zip")
+    staging = os.path.join(root, f"engine-staging-{version}")
+    ok = False
+    try:
+        os.makedirs(root, exist_ok=True)
+        _download.update(state="downloading", progress=0.0, error=None, version=version,
+                         kind="engine_patch", done=0, total=0)
+        size = int(patch["size"])
+        if shutil.disk_usage(root).free < 3 * size:
+            raise RuntimeError(f"Not enough free disk space. Free up at least {(3 * size) // (1024 * 1024)} MB and try again.")
+        shutil.rmtree(staging, ignore_errors=True)
+        done, sha = _stream_to_file(patch["url"], part, size)
+        _download.update(state="verifying", progress=0.99)
+        if done != size:
+            raise RuntimeError("The download was incomplete. Please try again.")
+        if sha.lower() != str(patch["sha256"]).lower():
+            raise RuntimeError("The download failed its integrity check. Please try again.")
+        with zipfile.ZipFile(part) as zf:
+            info = json.loads(zf.read("patch.json"))
+            if str(info.get("version")) != version or info.get("base_engine") != base_info().get("engine"):
+                raise RuntimeError("The update package does not match this installation.")
+            _safe_extract(zf, staging)
+        remove = [r for r in info.get("remove", []) if isinstance(r, str) and r and not r.startswith(("/", "\\"))
+                  and ".." not in r.replace("\\", "/").split("/") and ":" not in r]
+        ok = True
+        _download.update(state="installing", progress=1.0)
+        time.sleep(1.0)
+        _launch_patch_helper(staging, part, remove)
+    except Exception as exc:
+        ok = False
+        _download.update(state="error", error=str(exc))
+    finally:
+        if not ok:
+            shutil.rmtree(staging, ignore_errors=True)
+            try:
+                os.remove(part)
+            except OSError:
+                pass
 
 
 def _run_installer_download(manifest: dict) -> None:
@@ -264,7 +363,8 @@ def start_download() -> dict:
             if not can_install_in_app(manifest):
                 # Fallback: no installer file in the manifest (or not Windows).
                 return {"ok": False, "error": "This update needs the full installer.", "installer_url": info["installer_url"]}
-            threading.Thread(target=_run_installer_download, args=(manifest,), daemon=True).start()
+            runner = _run_engine_patch if engine_patch_for_this_install(manifest) else _run_installer_download
+            threading.Thread(target=runner, args=(manifest,), daemon=True).start()
         else:
             threading.Thread(target=_run_download, args=(manifest,), daemon=True).start()
     return {"ok": True}
