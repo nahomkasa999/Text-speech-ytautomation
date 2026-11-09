@@ -15,6 +15,17 @@ import subprocess
 from pathlib import Path
 from importlib.metadata import distribution
 from PyInstaller.utils.hooks import collect_all
+
+# PyInstaller executes this spec file without the project root on sys.path,
+# so a top-level `from src...` import fails with
+# `ModuleNotFoundError: No module named 'src'` (this broke the Windows build
+# in CI). SPECPATH is the directory holding this spec file, i.e. the project
+# root; put it first so the import below resolves no matter where
+# `pyinstaller` is run from. (The `pathex=['.']` in Analysis below only
+# affects the Analysis step, not the spec's own imports.)
+if SPECPATH not in sys.path:
+    sys.path.insert(0, SPECPATH)
+
 from src.ffmpeg_runtime import wheel_ffmpeg, validate_ffmpeg
 
 block_cipher = None
