@@ -125,6 +125,8 @@ def test_browser_native_export(browser_server):
             result=report['result']
             assert result['stage']=='completed'
             assert result['rendered_frames']==(60 if animated else 2)
+            # Only the first frame and the caption change repaint the whole picture.
+            assert result['renderer_stats']['fullFrames']==2
             assert 'encoding' in report['progress']
             path=Path(result['path'])
             metadata=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)]))

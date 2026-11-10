@@ -1,5 +1,6 @@
 import { renderScene } from './renderer.js';
 import { getCaptionPages, findPageAt } from './captionPagination.js';
+import { ambientBounds } from './ambientWidgets.js';
 
 const CACHE_LIMIT = 64 * 1024 * 1024;
 
@@ -13,6 +14,18 @@ function changing(layer) {
   return layer.type === 'video' || layer.type === 'audio_widget' || layer.id === 'layer_player_widget' ||
     layer.fadeIn !== undefined || layer.fadeOut !== undefined || !!layer.transition ||
     (layer.type === 'frame' && layer.children?.length);
+}
+
+// The scene-space box a changing layer stays inside, or null when it may paint anywhere.
+function reach(layer, scale) {
+  return layer.type === 'audio_widget' && !layer.rotation ? ambientBounds(layer, scale) : null;
+}
+
+function union(a, b) {
+  if (!a || !b) return a || b;
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
 }
 
 function canvasOf(width, height) {
@@ -145,17 +158,30 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
   const canvas = canvasOf(width, height);
   const ctx = canvas.getContext('2d');
   const bytes = width * height * 4;
-  const stats = { draws: 0, cacheHits: 0, cachedBytes: 0 };
+  const stats = { draws: 0, cacheHits: 0, cachedBytes: 0, fullFrames: 0 };
+  const whole = { x: 0, y: 0, width, height };
+  const scaleX = width / scene.canvas.width;
+  const scaleY = height / scene.canvas.height;
+  const pixelBox = box => {
+    const x = Math.max(0, Math.floor(box.x * scaleX));
+    const y = Math.max(0, Math.floor(box.y * scaleY));
+    const right = Math.min(width, Math.ceil((box.x + box.width) * scaleX));
+    const bottom = Math.min(height, Math.ceil((box.y + box.height) * scaleY));
+    return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null;
+  };
+  // The canvas keeps the previous frame, so a frame repaints only what changed since.
+  let stale = true;
+  let moved = null;
   const groups = [];
   for (const layer of scene.layers) {
     const dynamic = changing(layer);
     const caption = layer.type === 'transcription' || layer.id === 'layer_captions';
     const last = groups[groups.length - 1];
     if (!dynamic && !caption && last && !last.dynamic && !last.caption) last.layers.push(layer);
-    else groups.push({ layers: [layer], dynamic, caption, bitmap: null, key: null });
+    else groups.push({ layers: [layer], dynamic, caption, bitmap: null, key: null, shown: null });
   }
   const transparentCanvas = { ...scene.canvas, background: null };
-  const drawSubset = (target, layers, time, background = false) => {
+  const drawSubset = (target, layers, time, background = false, clip = whole) => {
     const subset = Object.create(scene);
     subset.layers = layers;
     subset.canvas = background ? scene.canvas : transparentCanvas;
@@ -163,12 +189,17 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
     subset.getLayer = scene.getLayer.bind(scene);
     const context = target.getContext('2d');
     context.save();
-    context.setTransform(width / scene.canvas.width, 0, 0, height / scene.canvas.height, 0, 0);
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.beginPath();
+    context.rect(clip.x, clip.y, clip.width, clip.height);
+    context.clip();
+    context.setTransform(scaleX, 0, 0, scaleY, 0, 0);
     renderScene(context, subset, { currentTime: time, bgImage: background ? bgImage : null });
     context.restore();
     stats.draws++;
   };
   const invalidateFonts = () => {
+    stale = true;
     for (const group of groups) group.key = null;
     for (const layer of scene.layers) layer._captionPageCache = null;
   };
@@ -209,14 +240,36 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
         }
         if (layer.type === 'video') await seekVideo(layer, time, exportSignal);
       }
+      const shown = groups.map(group => {
+        const visible = group.layers.filter(layer => active(layer, time));
+        const key = !visible.length ? null
+          : group.caption ? captionKey(visible[0], time) : visible.map(layer => layer.id).join('\0');
+        return { group, visible, key };
+      });
+      let full = stale || !background;
+      let moving = null;
+      for (const { group, visible, key } of shown) {
+        if (key !== group.shown) full = true;
+        if (!group.dynamic) continue;
+        for (const layer of visible) {
+          const box = reach(layer, Math.min(scaleX, scaleY));
+          if (box) moving = union(moving, pixelBox(box));
+          else full = true;
+        }
+      }
+      // Nothing changed at all: resend one pixel so the frame still counts.
+      const dirty = full ? whole : union(moving, moved) || { x: 0, y: 0, width: 1, height: 1 };
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, width, height);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(dirty.x, dirty.y, dirty.width, dirty.height);
+      ctx.clip();
+      ctx.clearRect(dirty.x, dirty.y, dirty.width, dirty.height);
       if (background) ctx.drawImage(background, 0, 0);
       else { drawSubset(scratch, [], time, true); ctx.drawImage(scratch, 0, 0); }
-      for (const group of groups) {
-        const visible = group.layers.filter(layer => active(layer, time));
+      for (const { group, visible, key } of shown) {
+        group.shown = key;
         if (!visible.length) continue;
-        const key = group.caption ? captionKey(visible[0], time) : visible.map(layer => layer.id).join('\0');
         if (!group.dynamic && group.bitmap && group.key === key) {
           stats.cacheHits++;
           ctx.drawImage(group.bitmap, 0, 0);
@@ -227,11 +280,16 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
           stats.cachedBytes += bytes;
         }
         const target = group.bitmap || scratch;
-        drawSubset(target, visible, time);
+        // A cached bitmap is reused on later frames, so it is always drawn whole.
+        drawSubset(target, visible, time, false, group.bitmap ? whole : dirty);
         group.key = key;
         ctx.drawImage(target, 0, 0);
       }
-      return canvas;
+      ctx.restore();
+      stale = false;
+      moved = moving;
+      if (full) stats.fullFrames++;
+      return dirty;
     },
     repeatFrames(frameIndex, totalFrames, fps, speed) {
       const time = frameIndex / fps * speed;

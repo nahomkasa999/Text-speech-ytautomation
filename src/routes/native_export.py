@@ -49,13 +49,15 @@ async def start(token: str):
 
 
 @router.put('/{token}/frame')
-async def frame(token: str, index: int, request: Request, repeat: int = 1):
+async def frame(token: str, index: int, request: Request, repeat: int = 1,
+                x: int = 0, y: int = 0, width: int | None = None, height: int | None = None):
     job = _job(token)
     if not job.transport.acquire(blocking=False):
         raise HTTPException(409, 'Another upload is in progress.')
     try:
         body = await _bounded_body(request, job.width * job.height * 4)
-        return await _call(export_manager.frame, token, index, repeat, body)
+        box = (x, y, job.width if width is None else width, job.height if height is None else height)
+        return await _call(export_manager.frame, token, index, repeat, body, box)
     finally:
         job.transport.release()
 

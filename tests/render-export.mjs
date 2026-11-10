@@ -111,6 +111,11 @@ try {
       {id:'top',type:'shape',x:30,y:35,width:20,height:20,fill:'#ff5500'}
     ]});
     await compareScene(wave, 160, 90, [0,0.5,1.25], style);
+    // Later frames repaint only the wave's box, so they prove the box holds the glow too.
+    wave.layers[0].glow = 0.8;
+    await compareScene(wave, 160, 90, [0,0.5,1.25,0.2], style+' with glow');
+    await compareScene(wave, 96, 54, [0,0.5,1.25], style+' with glow, scaled down');
+    wave.layers[0].glow = 0;
     const dynamic = await createExportRenderer(wave,{width:160,height:90});
     assert(dynamic.repeatFrames(0,90,30,1) === 1, style+' remains animated');
     dynamic.dispose();

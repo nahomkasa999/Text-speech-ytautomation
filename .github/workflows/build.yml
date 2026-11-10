@@ -9,6 +9,8 @@ name: Build Desktop Apps (Windows installer + portable exe, Linux)
 #   (requirements.txt, book_narrator.spec, app_boot.py or desktop.py).
 # - Engine updates are in-app too: installed apps download only the engine
 #   files that changed (never the voice model) from BookNarrator-Engine-*.zip.
+# - A manual run with "installers_only" releases just BookNarrator-Setup-*.exe and
+#   BookNarrator-Linux-*.tar.gz and leaves the in-app update channel untouched.
 
 on:
   push:
@@ -46,6 +48,11 @@ on:
         required: false
         default: 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin'
         type: string
+      installers_only:
+        description: 'Release only the Windows installer and the Linux app, and send no in-app update?'
+        required: true
+        default: false
+        type: boolean
       publish_release:
         description: 'Publish the finished files as a GitHub Release (a public download page)?'
         required: true
@@ -335,6 +342,25 @@ jobs:
           path: release
           merge-multiple: true
 
+      - name: Keep only the Windows installer and the Linux app
+        if: github.event.inputs.installers_only == 'true'
+        run: |
+          find release -type f ! -name 'BookNarrator-Setup-*.exe' ! -name 'BookNarrator-Linux-*.tar.gz' -delete
+          ls -la release
+
+      - name: Write the download notes
+        run: |
+          {
+            echo '### Download'
+            echo '- **Windows: BookNarrator-Setup-*.exe.** Double-click it. It installs in seconds (no admin needed) and opens in ~2 s every time.'
+            if ls release/BookNarrator-Portable-*.exe >/dev/null 2>&1; then
+              echo '- **Windows, no install: BookNarrator-Portable-*.exe.** Just run it. Slower to open (unpacks itself on every launch, ~5-20 s).'
+            fi
+            echo '- **Linux: BookNarrator-Linux-*.tar.gz.** Extract it and run `book-narrator` inside the folder.'
+            echo
+            echo 'Windows SmartScreen may say "Windows protected your PC" because the app is not code-signed yet: click **More info -> Run anyway**.'
+          } > download-notes.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -343,12 +369,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           files: release/*
           generate_release_notes: true
-          body: |
-            ### Download for Windows
-            - **BookNarrator-Setup-*.exe** (recommended): double-click, it installs in seconds (no admin needed) and opens in ~2 s every time.
-            - **BookNarrator-Portable-*.exe**: no install, just run it. Slower to open (unpacks itself on every launch, ~5-20 s).
-
-            Windows SmartScreen may say "Windows protected your PC" because the app is not code-signed yet: click **More info -> Run anyway**.
+          body_path: download-notes.md
 
   # ---- Publish the in-app update (installed apps check this) ----
   publish-update:
@@ -357,6 +378,7 @@ jobs:
     # installer fields in update.json never point at an old installer.
     if: >-
       always() && needs.update.result == 'success' &&
+      github.event.inputs.installers_only != 'true' &&
       (needs.update.outputs.engine_changed != 'true' || needs.release.result == 'success')
     runs-on: ubuntu-latest
     steps:

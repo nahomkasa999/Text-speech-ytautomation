@@ -68,11 +68,12 @@ export async function exportVideoNative({ scene, bgImage, settings, musicUrl, si
     for (let index = 0; index < job.total_frames;) {
       checkAbort();
       const sourceTime = index / job.fps * settings.speed;
-      await renderer.renderFrame(sourceTime);
+      const dirty = await renderer.renderFrame(sourceTime);
       checkAbort();
       const repeat = renderer.repeatFrames(index, job.total_frames, job.fps, settings.speed);
-      const pixels = ctx.getImageData(0, 0, job.width, job.height).data;
-      const status = await requestJob(job.id, `/frame?index=${index}&repeat=${repeat}`, {
+      const pixels = ctx.getImageData(dirty.x, dirty.y, dirty.width, dirty.height).data;
+      const box = `x=${dirty.x}&y=${dirty.y}&width=${dirty.width}&height=${dirty.height}`;
+      const status = await requestJob(job.id, `/frame?index=${index}&repeat=${repeat}&${box}`, {
         method: 'PUT', body: pixels, signal,
         headers: { 'Content-Type': 'application/octet-stream' },
       });
