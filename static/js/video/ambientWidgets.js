@@ -305,6 +305,36 @@ export function isAmbientStyle(style) {
   return Object.prototype.hasOwnProperty.call(AMBIENT, style);
 }
 
+function glowOf(layer) {
+  return Math.max(0, Math.min(1, Number(layer.glow) || 0));
+}
+
+function blurOf(b, glow) {
+  return (4 + glow * 22) * b.k;
+}
+
+// Room around the band for wave peaks and line glow.
+function padOf(b, glow) {
+  return Math.ceil(Math.max(48 * b.k, glow * 60 * b.k) + 8);
+}
+
+/**
+ * The box drawAmbientWidget paints inside, in scene units. The export redraws
+ * and uploads only this box while the rest of the picture stands still.
+ * @param scale  output pixels per scene unit; the glow blur does not shrink with it
+ */
+export function ambientBounds(layer, scale = 1) {
+  const b = band(layer);
+  const glow = glowOf(layer);
+  const pad = padOf(b, glow);
+  // A blur fades out within three standard deviations.
+  const spread = glow > 0 ? Math.ceil(3 * blurOf(b, glow) / Math.min(1, scale)) : 0;
+  return {
+    x: b.x - pad - spread, y: b.y - pad - spread,
+    width: Math.ceil(b.w + pad * 2) + spread * 2, height: Math.ceil(b.h + pad * 2) + spread * 2,
+  };
+}
+
 // One reusable scratch canvas for the glow pass.
 let scratch = null;
 function getScratch(w, h) {
@@ -327,11 +357,11 @@ export function drawAmbientWidget(ctx, layer, t, color, energy = null) {
   const colors = layerColors({ ...layer, color: layer.color || color });
   // Line thickness grows with the size so big waves don't look thin.
   const thickness = Math.max(1.2, (layer.thickness || 3) * b.k);
-  const glow = Math.max(0, Math.min(1, Number(layer.glow) || 0));
+  const glow = glowOf(layer);
 
   // Draw into a scratch canvas, then composite: this keeps the layer's own
   // opacity/rotation (set on ctx by the renderer) and makes the glow cheap.
-  const pad = Math.ceil(Math.max(48 * b.k, glow * 60 * b.k) + 8);
+  const pad = padOf(b, glow);
   const sw = Math.ceil(b.w + pad * 2);
   const sh = Math.ceil(b.h + pad * 2);
   const off = getScratch(sw, sh);
@@ -345,7 +375,7 @@ export function drawAmbientWidget(ctx, layer, t, color, energy = null) {
 
   ctx.save();
   if (glow > 0) {
-    ctx.filter = `blur(${(4 + glow * 22) * b.k}px)`;
+    ctx.filter = `blur(${blurOf(b, glow)}px)`;
     ctx.globalAlpha *= Math.min(1, 0.55 + glow * 0.6);
     ctx.drawImage(off, 0, 0, sw, sh, b.x - pad, b.y - pad, sw, sh);
     ctx.filter = 'none';

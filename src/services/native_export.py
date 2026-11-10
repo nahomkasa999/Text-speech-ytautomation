@@ -24,6 +24,8 @@ from src.ffmpeg_runtime import validate_ffmpeg
 MAX_CHUNK = 4 * 1024 * 1024
 DISK_RESERVE = 128 * 1024 * 1024
 TERMINAL = {"completed", "cancelled", "failed"}
+# Leave one core for the editor, which draws the frames while FFmpeg encodes them.
+ENCODER_THREADS = max(2, min(16, (os.cpu_count() or 2) - 1))
 
 
 def _video_maxrate(width, height, fps):
@@ -127,6 +129,7 @@ class ExportJob:
     started: float = field(default_factory=time.monotonic)
     touched: float = field(default_factory=time.monotonic)
     process: object = None
+    picture: object = None
     claim: object = None
     logs: deque = field(default_factory=lambda: deque(maxlen=24))
     lock: object = field(default_factory=threading.RLock)
@@ -303,7 +306,7 @@ class ExportManager:
         else:
             filters += ';[n]anull[a]'
         command += ['-filter_complex', filters, '-map', '0:v:0', '-map', '[a]', '-frames:v', str(job.total_frames), '-t', str(job.duration),
-                    '-threads', '2', '-pix_fmt', 'yuv420p', '-max_muxing_queue_size', '128']
+                    '-threads', str(ENCODER_THREADS), '-pix_fmt', 'yuv420p', '-max_muxing_queue_size', '128']
         if s['format'] == 'mp4':
             command += ['-c:v', 'libx264', '-preset', 'veryfast', '-bf', '0', '-crf', '20', '-maxrate', str(_video_maxrate(job.width, job.height, job.fps)),
                         '-bufsize', str(_video_maxrate(job.width, job.height, job.fps)), '-g', str(job.fps * 2), '-c:a', 'aac', '-b:a', '192k',
@@ -350,23 +353,43 @@ class ExportManager:
             job.logs.append(line.decode('utf-8', errors='replace').strip()[:1000])
         job.process.stderr.close()
 
-    def frame(self, token, index, repeat, data):
+    def frame(self, token, index, repeat, data, box=None):
+        """Encode the next frame from RGBA pixels for `box` (x, y, width, height).
+
+        Pixels outside the box stay as they were in the previous frame, so the
+        editor uploads only the part of the picture that moved.
+        """
         job = self.get(token)
+        x, y, width, height = box or (0, 0, job.width, job.height)
+        whole = (x, y, width, height) == (0, 0, job.width, job.height)
         with job.operation:
             with job.lock:
                 if job.stage != 'encoding' or index != job.frames:
                     raise ValueError('Video frame is out of order or export is not encoding.')
                 if not 1 <= repeat <= 300 or index + repeat > job.total_frames:
                     raise ValueError('Invalid repeated frame count.')
-                if len(data) != job.width * job.height * 4:
+                if not (0 <= x < x + width <= job.width and 0 <= y < y + height <= job.height):
+                    raise ValueError('Video frame box is outside the picture.')
+                if len(data) != width * height * 4:
                     raise ValueError('Video frame has an incorrect byte length.')
+                if job.picture is None and not whole:
+                    raise ValueError('The first video frame must cover the whole picture.')
                 job.touched = time.monotonic()
+            if whole:
+                picture = job.picture = data if isinstance(data, bytearray) else bytearray(data)
+            else:
+                picture = job.picture
+                target, source = memoryview(picture), memoryview(data)
+                stride, row = job.width * 4, width * 4
+                for line in range(height):
+                    start = (y + line) * stride + x * 4
+                    target[start:start + row] = source[line * row:(line + 1) * row]
             try:
                 self._disk_check(job)
                 for _ in range(repeat):
                     if job.stage != 'encoding':
                         raise ValueError('Export was cancelled.')
-                    remaining = memoryview(data)
+                    remaining = memoryview(picture)
                     while remaining:
                         written = job.process.stdin.write(remaining)
                         if not written:
@@ -401,6 +424,7 @@ class ExportManager:
                     self._disk_check(job)
                     os.replace(job.partial, job.target)
                     job.stage = 'completed'
+                    job.picture = None
                     job.encoded_seconds = job.duration
                     try:
                         job.music.unlink(missing_ok=True)
@@ -419,6 +443,7 @@ class ExportManager:
                 return job.status()
             job.stage = 'failed' if error else 'cancelled'
             job.error = error
+            job.picture = None
             process = job.process
         # This never takes the pipe writer's lock. Killing FFmpeg unblocks writes.
         if process is not None:

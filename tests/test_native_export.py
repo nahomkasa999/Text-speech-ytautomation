@@ -92,6 +92,35 @@ def test_looping_music_is_unsped(manager, tmp_path):
     assert max(pcm[-4800:]) > 1000
 
 
+def test_partial_frames_keep_the_rest_of_the_picture(manager, tmp_path):
+    info = manager.prepare(tmp_path / 'boxes.mp4', settings())
+    token = info['id']
+    manager.start(token)
+    with pytest.raises(ValueError, match='whole picture'):
+        manager.frame(token, 0, 1, bytes(16 * 16 * 4), (0, 0, 16, 16))
+    manager.frame(token, 0, 10, bytes([200, 30, 30, 255]) * (64 * 48))
+    with pytest.raises(ValueError, match='outside the picture'):
+        manager.frame(token, 10, 10, bytes(16 * 16 * 4), (56, 0, 16, 16))
+    with pytest.raises(ValueError, match='byte length'):
+        manager.frame(token, 10, 10, bytes(15 * 16 * 4), (32, 16, 16, 16))
+    manager.frame(token, 10, 10, bytes([30, 30, 200, 255]) * (16 * 16), (32, 16, 16, 16))
+    path = manager.finish(token)['path']
+    decoded = subprocess.run([native.validate_ffmpeg(), '-v', 'error', '-i', path, '-map', '0:v', '-f', 'rawvideo',
+                              '-pix_fmt', 'rgb24', '-'], capture_output=True, check=True).stdout
+
+    def pixel(frame, x, y):
+        start = (frame * 48 * 64 + y * 64 + x) * 3
+        return decoded[start:start + 3]
+
+    def close(actual, expected):
+        return all(abs(a - e) < 30 for a, e in zip(actual, expected))
+
+    assert close(pixel(5, 40, 24), (200, 30, 30))
+    assert close(pixel(15, 40, 24), (30, 30, 200))
+    assert close(pixel(15, 8, 8), (200, 30, 30))
+    assert close(pixel(15, 56, 40), (200, 30, 30))
+
+
 def test_reject_order_and_cancel_preserves_destination(manager, tmp_path):
     target = tmp_path / 'existing.mp4'
     target.write_bytes(b'original')
