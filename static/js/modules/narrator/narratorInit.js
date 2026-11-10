@@ -14,6 +14,7 @@ import { ModeSwitcher } from '../ui/modeSwitcher.js';
 import { ExportManager } from '../studio/exporter/exportManager.js';
 import { VoiceDesignManager } from './voiceDesign.js';
 import { attachDownloadLink } from '../services/fileSaver.js';
+import { attachCaptionDownload } from '../services/captionExport.js';
 
 export function createNarratorSubsystem({ el, state, scene, studio }) {
   const refreshStats = () => updateTextStats(el.bookText, state.speed, el.statWords, el.statChars, el.statTime);
@@ -50,6 +51,11 @@ export function createNarratorSubsystem({ el, state, scene, studio }) {
 
   setupVoicePreview({ el, state });
   attachDownloadLink(el.btnDownloadAudio);
+  attachCaptionDownload(
+    el.btnDownloadCaptions,
+    () => state.video.syncedSegments,
+    () => (el.btnDownloadAudio.getAttribute('download') || 'audiobook.wav').replace(/\.wav$/i, '') + '.srt'
+  );
 
   new VoiceDesignManager({
     el, state,
