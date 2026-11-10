@@ -57,6 +57,7 @@ function getNarratorElements() {
     deckSubtitle: document.getElementById('deck-subtitle'),
     mainAudioPlayer: document.getElementById('main-audio-player'),
     btnDownloadAudio: document.getElementById('btn-download-audio'),
+    btnDownloadCaptions: document.getElementById('btn-download-captions'),
     btnOpenInVideoStudio: document.getElementById('btn-open-in-video-studio'),
     historyList: document.getElementById('history-list'),
     sessionCountBadge: document.getElementById('session-count-badge'),
