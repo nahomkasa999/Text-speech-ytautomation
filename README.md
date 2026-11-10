@@ -2,6 +2,7 @@
 
 A complete, high-fidelity AI audiobook narrator application built for long-form books (12,000 to 20,000+ words). Features a sleek 3-panel studio interface with real-time progress tracking, project history, and support for all three voice synthesis methods.
 
+**Releases:** https://github.com/nahomkasa999/Text-speech-ytautomation/releases — download the Windows installer / portable exe there.
 ---
 
 ## 🌟 The 3 Voice Engines
