@@ -32,7 +32,17 @@ def resolve_ffmpeg() -> str:
         if not path.is_file():
             path = Path(shutil.which("ffmpeg") or "")
     if not path.is_file():
-        raise FFmpegUnavailable("FFmpeg is missing. Reinstall the full application to restore its media engine.")
+        if getattr(sys, "frozen", False):
+            # The installer bundles FFmpeg. It is only absent when this install
+            # predates the bundled media engine (an app-code update does not add
+            # it), when an engine update did not finish, or when antivirus removed it.
+            raise FFmpegUnavailable(
+                f"The bundled FFmpeg media engine was not found at {path}. This install is missing part of "
+                "the app: install the pending update from the update dialog (it restores the media engine) "
+                "or reinstall with the latest BookNarrator-Setup. If it keeps disappearing, check that "
+                "antivirus did not quarantine ffmpeg.exe."
+            )
+        raise FFmpegUnavailable("FFmpeg is missing. Install the project requirements (imageio-ffmpeg) or put ffmpeg on PATH.")
     return str(path.resolve())
 
 
