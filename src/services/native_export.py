@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import struct
 import subprocess
 import threading
 import time
@@ -42,6 +41,17 @@ def _video_bitrate(width, height, fps, container):
     """Average bitrate the editor's WebCodecs encoder targets, matching the x264/VP9 caps."""
     maxrate = _video_maxrate(width, height, fps)
     return maxrate if container == 'mp4' else min(4_000_000, maxrate)
+
+
+def _ivf_header(fourcc, width, height, fps, frames):
+    """IVF file header whose timestamps count in 1/fps units.
+
+    Built with int.to_bytes: the 1.0.16 engine's frozen standard library lacks the binary packing module.
+    """
+    fields = ((0, 2), (32, 2))
+    sizes = ((width, 2), (height, 2), (fps, 4), (1, 4), (frames, 4), (0, 4))
+    return (b'DKIF' + b''.join(v.to_bytes(n, 'little') for v, n in fields) + fourcc
+            + b''.join(v.to_bytes(n, 'little') for v, n in sizes))
 
 
 def _split_chunks(data, count):
@@ -391,9 +401,7 @@ class ExportManager:
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0, creationflags=_creationflags())
                     if job.video != 'raw':
                         fourcc = ENCODED_CODECS[job.settings['format']][1]
-                        # IVF file header: timestamps count in 1/fps units.
-                        self._write(job, b'DKIF' + struct.pack('<HH4sHHIIII', 0, 32, fourcc, job.width, job.height,
-                                                               job.fps, 1, job.total_frames, 0))
+                        self._write(job, _ivf_header(fourcc, job.width, job.height, job.fps, job.total_frames))
                     job.stage = 'encoding'
                     job.started = job.touched = time.monotonic()
                 except Exception as exc:
@@ -501,7 +509,8 @@ class ExportManager:
                 for offset, (_, payload) in enumerate(frames):
                     if job.stage != 'encoding':
                         raise ValueError('Export was cancelled.')
-                    self._write(job, struct.pack('<IQ', len(payload), index + offset))
+                    # IVF frame header: payload size, then the timestamp in 1/fps units.
+                    self._write(job, len(payload).to_bytes(4, 'little') + (index + offset).to_bytes(8, 'little'))
                     self._write(job, payload)
                     job.frames += 1
                     job.touched = time.monotonic()

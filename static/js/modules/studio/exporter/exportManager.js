@@ -161,7 +161,10 @@ export class ExportManager {
           },
           onFrame: time => this.callbacks.updatePlayheadPosition(time, this.el.videoAudioPlayer.duration || 1),
         });
-        console.info('[Export] Native CPU export', result);
+        const path = result.video_path === 'webcodecs'
+          ? `WebCodecs ${result.video_codec} (${result.video_hardware_acceleration}), FFmpeg copies the video`
+          : `raw frames, FFmpeg encodes the video${result.video_fallback_reason ? `; WebCodecs unavailable: ${result.video_fallback_reason}` : ''}`;
+        console.info(`[Export] Native export: ${path}`, result);
         showToast(`Video saved in ${formatEta(result.elapsed_seconds)}.`, 'success', {
           actionLabel: 'Show in folder',
           onAction: () => window.pywebview.api.reveal(result.path),
