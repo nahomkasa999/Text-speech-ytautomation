@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Request
 import time
 from starlette.concurrency import run_in_threadpool
 
-from src.services.native_export import export_manager, MAX_CHUNK
+from src.services.native_export import export_manager, MAX_CHUNK, MAX_BATCH_BYTES
 
 router = APIRouter(prefix='/api/native-export', tags=['native-export'])
 
@@ -43,9 +43,9 @@ async def music(token: str, offset: int, request: Request):
 
 
 @router.post('/{token}/start')
-async def start(token: str):
+async def start(token: str, video: str | None = None):
     _job(token)
-    return await _call(export_manager.start, token)
+    return await _call(export_manager.start, token, video)
 
 
 @router.put('/{token}/frame')
@@ -58,6 +58,19 @@ async def frame(token: str, index: int, request: Request, repeat: int = 1,
         body = await _bounded_body(request, job.width * job.height * 4)
         box = (x, y, job.width if width is None else width, job.height if height is None else height)
         return await _call(export_manager.frame, token, index, repeat, body, box)
+    finally:
+        job.transport.release()
+
+
+@router.put('/{token}/chunks')
+async def chunks(token: str, index: int, count: int, request: Request):
+    """Ordered batch of WebCodecs-encoded frames: `<u32 size><u8 flags><payload>` per frame."""
+    job = _job(token)
+    if not job.transport.acquire(blocking=False):
+        raise HTTPException(409, 'Another upload is in progress.')
+    try:
+        body = await _bounded_body(request, MAX_BATCH_BYTES)
+        return await _call(export_manager.chunks, token, index, count, body)
     finally:
         job.transport.release()
 

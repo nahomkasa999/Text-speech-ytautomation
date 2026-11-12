@@ -1,6 +1,7 @@
 import { renderScene } from './renderer.js';
 import { getCaptionPages, findPageAt } from './captionPagination.js';
 import { ambientBounds } from './ambientWidgets.js';
+import { calculateClipOpacity } from './transitions.js';
 
 const CACHE_LIMIT = 64 * 1024 * 1024;
 
@@ -10,10 +11,46 @@ function active(layer, time) {
     (time >= (layer.startTime ?? 0) && time <= (layer.endTime ?? 999999)));
 }
 
-function changing(layer) {
+// Layers that may look different on every frame they are shown.
+function animated(layer) {
   return layer.type === 'video' || layer.type === 'audio_widget' || layer.id === 'layer_player_widget' ||
-    layer.fadeIn !== undefined || layer.fadeOut !== undefined || !!layer.transition ||
-    (layer.type === 'frame' && layer.children?.length);
+    (layer.type === 'frame' && layer.children?.length) ||
+    // The renderer only knows fades. Treat any other transition as animated rather than guess.
+    (!!layer.transition && layer.transition !== 'fade');
+}
+
+function fades(layer) {
+  return layer.fadeIn !== undefined || layer.fadeOut !== undefined || layer.transition === 'fade';
+}
+
+// Keeps time comparisons on the safe side of floating-point rounding near a fade's edges.
+const FADE_MARGIN = 1e-6;
+
+/**
+ * The opacity applyLayerTransition() gives a faded layer at `time`, or null while
+ * a fade is running (or too close to its edges to be sure). Outside the fade
+ * windows the opacity is a constant, so the layer can be cached and repeated.
+ */
+function fadeOpacity(layer, time) {
+  const start = layer.startTime || 0;
+  const duration = layer.duration || 999999;
+  const fadeIn = layer.fadeIn || (layer.transition === 'fade' ? 0.5 : 0);
+  const fadeOut = layer.fadeOut || (layer.transition === 'fade' ? 0.5 : 0);
+  if (![start, duration, fadeIn, fadeOut, time].every(Number.isFinite)) return null;
+  if (fadeIn > 0 && time >= start - FADE_MARGIN && time <= start + fadeIn + FADE_MARGIN) return null;
+  const end = start + duration;
+  if (fadeOut > 0 && time >= end - fadeOut - FADE_MARGIN && time <= end + FADE_MARGIN) return null;
+  return calculateClipOpacity({ start, duration, fadeIn, fadeOut }, time);
+}
+
+// Whether the layer may look different from one frame to the next at `time`.
+function changing(layer, time) {
+  return animated(layer) || (fades(layer) && fadeOpacity(layer, time) === null);
+}
+
+// What a static layer's picture depends on besides its frozen properties.
+function staticKey(layer, time) {
+  return fades(layer) ? String(fadeOpacity(layer, time)) : '';
 }
 
 // The scene-space box a changing layer stays inside, or null when it may paint anywhere.
@@ -28,10 +65,14 @@ function union(a, b) {
   return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
 }
 
-function canvasOf(width, height) {
+// Every canvas the renderer draws between must live in the same memory: drawing
+// a GPU canvas into a CPU one (or back) costs a full readback per draw. The first
+// getContext() call fixes the canvas's settings, so it is made here.
+function canvasOf(width, height, willReadFrequently = true) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
+  canvas.getContext('2d', { willReadFrequently });
   return canvas;
 }
 
@@ -117,7 +158,12 @@ async function seekVideo(layer, time, signal) {
   if (video.readyState < 2) await waitForMedia(video, 'loadeddata', signal);
 }
 
-export async function createExportRenderer(source, { width, height, bgImage = null, signal }) {
+/**
+ * `willReadFrequently` keeps the canvases in CPU memory, so getImageData() is a
+ * plain copy instead of a GPU readback. Pass false only when the frames are never
+ * read back (the WebCodecs path may then let the browser keep them on the GPU).
+ */
+export async function createExportRenderer(source, { width, height, bgImage = null, signal, willReadFrequently = true }) {
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal?.aborted) cancel();
@@ -155,7 +201,8 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
     throw error;
   }
 
-  const canvas = canvasOf(width, height);
+  const newCanvas = (w, h) => canvasOf(w, h, willReadFrequently);
+  const canvas = newCanvas(width, height);
   const ctx = canvas.getContext('2d');
   const bytes = width * height * 4;
   const stats = { draws: 0, cacheHits: 0, cachedBytes: 0, fullFrames: 0 };
@@ -172,13 +219,16 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
   // The canvas keeps the previous frame, so a frame repaints only what changed since.
   let stale = true;
   let moved = null;
+  // Neighbouring layers that are not always animated share one cached bitmap. A
+  // group is redrawn every frame only while one of its layers is changing (e.g.
+  // during a fade), and its bitmap is reused only for exactly the same static state.
   const groups = [];
   for (const layer of scene.layers) {
-    const dynamic = changing(layer);
+    const always = !!animated(layer);
     const caption = layer.type === 'transcription' || layer.id === 'layer_captions';
     const last = groups[groups.length - 1];
-    if (!dynamic && !caption && last && !last.dynamic && !last.caption) last.layers.push(layer);
-    else groups.push({ layers: [layer], dynamic, caption, bitmap: null, key: null, shown: null });
+    if (!always && !caption && last && !last.always && !last.caption) last.layers.push(layer);
+    else groups.push({ layers: [layer], always, caption, bitmap: null, key: null, shown: null });
   }
   const transparentCanvas = { ...scene.canvas, background: null };
   const drawSubset = (target, layers, time, background = false, clip = whole) => {
@@ -206,11 +256,11 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
   document.fonts?.addEventListener('loadingdone', invalidateFonts);
   let background = null;
   if (bytes <= CACHE_LIMIT) {
-    background = canvasOf(width, height);
+    background = newCanvas(width, height);
     drawSubset(background, [], 0, true);
     stats.cachedBytes += bytes;
   }
-  const scratch = canvasOf(width, height);
+  const scratch = newCanvas(width, height);
   let disposed = false;
 
   function captionKey(layer, time) {
@@ -242,15 +292,18 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
       }
       const shown = groups.map(group => {
         const visible = group.layers.filter(layer => active(layer, time));
-        const key = !visible.length ? null
-          : group.caption ? captionKey(visible[0], time) : visible.map(layer => layer.id).join('\0');
-        return { group, visible, key };
+        const dynamic = group.always || visible.some(layer => changing(layer, time));
+        // A changing group never matches a static key, so its first static frame repaints.
+        let key = !visible.length ? null
+          : visible.map(layer => `${layer.id}\u0001${changing(layer, time) ? '*' : staticKey(layer, time)}`).join('\0');
+        if (key !== null && group.caption) key += '\0' + captionKey(visible[0], time);
+        return { group, visible, key, dynamic };
       });
       let full = stale || !background;
       let moving = null;
-      for (const { group, visible, key } of shown) {
+      for (const { group, visible, key, dynamic } of shown) {
         if (key !== group.shown) full = true;
-        if (!group.dynamic) continue;
+        if (!dynamic) continue;
         for (const layer of visible) {
           const box = reach(layer, Math.min(scaleX, scaleY));
           if (box) moving = union(moving, pixelBox(box));
@@ -267,22 +320,24 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
       ctx.clearRect(dirty.x, dirty.y, dirty.width, dirty.height);
       if (background) ctx.drawImage(background, 0, 0);
       else { drawSubset(scratch, [], time, true); ctx.drawImage(scratch, 0, 0); }
-      for (const { group, visible, key } of shown) {
+      for (const { group, visible, key, dynamic } of shown) {
         group.shown = key;
         if (!visible.length) continue;
-        if (!group.dynamic && group.bitmap && group.key === key) {
+        if (!dynamic && group.bitmap && group.key === key) {
           stats.cacheHits++;
           ctx.drawImage(group.bitmap, 0, 0);
           continue;
         }
-        if (!group.dynamic && !group.bitmap && stats.cachedBytes + bytes <= CACHE_LIMIT) {
-          group.bitmap = canvasOf(width, height);
+        if (!dynamic && !group.always && !group.bitmap && stats.cachedBytes + bytes <= CACHE_LIMIT) {
+          group.bitmap = newCanvas(width, height);
           stats.cachedBytes += bytes;
         }
-        const target = group.bitmap || scratch;
+        // While a group is changing it draws into scratch, so its bitmap keeps
+        // the picture that matches group.key.
+        const target = !dynamic && group.bitmap ? group.bitmap : scratch;
         // A cached bitmap is reused on later frames, so it is always drawn whole.
-        drawSubset(target, visible, time, false, group.bitmap ? whole : dirty);
-        group.key = key;
+        drawSubset(target, visible, time, false, target === scratch ? dirty : whole);
+        if (target !== scratch) group.key = key;
         ctx.drawImage(target, 0, 0);
       }
       ctx.restore();
@@ -291,20 +346,25 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
       if (full) stats.fullFrames++;
       return dirty;
     },
+    // How many frames from frameIndex on look exactly like frameIndex.
     repeatFrames(frameIndex, totalFrames, fps, speed) {
       const time = frameIndex / fps * speed;
-      if (scene.layers.some(layer => active(layer, time) && changing(layer))) return 1;
+      if (scene.layers.some(layer => active(layer, time) && changing(layer, time))) return 1;
       const state = scene.layers.map(layer => active(layer, time));
+      const opacity = scene.layers.map((layer, i) => state[i] ? staticKey(layer, time) : null);
       const captions = scene.layers.map((layer, i) => state[i] && (layer.type === 'transcription' || layer.id === 'layer_captions') ? captionKey(layer, time) : null);
       let count = 1;
       while (count < 300 && frameIndex + count < totalFrames) {
         const next = (frameIndex + count) / fps * speed;
         if (scene.layers.some((layer, i) => active(layer, next) !== state[i] ||
+          (state[i] && (changing(layer, next) || staticKey(layer, next) !== opacity[i])) ||
           (captions[i] !== null && captionKey(layer, next) !== captions[i]))) break;
         count++;
       }
       return count;
     },
+    // The next frame repaints the whole picture, e.g. after rendering out of order.
+    reset() { stale = true; moved = null; },
     dispose() {
       disposed = true;
       document.fonts?.removeEventListener('loadingdone', invalidateFonts);

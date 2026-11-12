@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import threading
 import time
@@ -22,6 +23,11 @@ from src.config import AUDIO_DIR, APP_DATA_DIR
 from src.ffmpeg_runtime import validate_ffmpeg
 
 MAX_CHUNK = 4 * 1024 * 1024
+# Encoded video arrives in ordered batches of whole frames (WebCodecs chunks).
+MAX_BATCH_BYTES = 16 * 1024 * 1024
+MAX_BATCH_FRAMES = 300
+# Video the editor already compressed with WebCodecs: container fourcc per output format.
+ENCODED_CODECS = {'mp4': ('h264', b'H264'), 'webm': ('vp9', b'VP90')}
 DISK_RESERVE = 128 * 1024 * 1024
 TERMINAL = {"completed", "cancelled", "failed"}
 # Leave one core for the editor, which draws the frames while FFmpeg encodes them.
@@ -30,6 +36,30 @@ ENCODER_THREADS = max(2, min(16, (os.cpu_count() or 2) - 1))
 
 def _video_maxrate(width, height, fps):
     return max(500_000, min(8_000_000, math.ceil(8_000_000 * width * height / (1920 * 1080) * fps / 30)))
+
+
+def _video_bitrate(width, height, fps, container):
+    """Average bitrate the editor's WebCodecs encoder targets, matching the x264/VP9 caps."""
+    maxrate = _video_maxrate(width, height, fps)
+    return maxrate if container == 'mp4' else min(4_000_000, maxrate)
+
+
+def _split_chunks(data, count):
+    """Split a batch of `count` frames, each `<u32 size><u8 flags><payload>`, flag 1 = keyframe."""
+    view = memoryview(data)
+    frames, pos = [], 0
+    for _ in range(count):
+        if pos + 5 > len(view):
+            raise ValueError('Video chunk batch is truncated.')
+        size, flags = int.from_bytes(view[pos:pos + 4], 'little'), view[pos + 4]
+        pos += 5
+        if not 0 < size <= len(view) - pos or flags & ~1:
+            raise ValueError('Video chunk batch is malformed.')
+        frames.append((bool(flags & 1), view[pos:pos + size]))
+        pos += size
+    if pos != len(view):
+        raise ValueError('Video chunk batch has trailing bytes.')
+    return frames
 
 
 def _number(settings, key, default, low, high, integer=False):
@@ -121,6 +151,7 @@ class ExportJob:
     settings: dict
     sample_rate: int
     channels: int
+    video: str = 'raw'
     stage: str = 'prepared'
     frames: int = 0
     music_bytes: int = 0
@@ -144,7 +175,7 @@ class ExportJob:
                         progress=min(1, self.frames / self.total_frames), elapsed_seconds=elapsed,
                         speed=speed, eta_seconds=(max(0, self.duration-self.encoded_seconds)/speed
                         if speed and self.stage == 'encoding' else (0 if self.stage == 'completed' else None)),
-                        encoded_seconds=self.encoded_seconds, error=self.error,
+                        encoded_seconds=self.encoded_seconds, error=self.error, video_encoding=self.video,
                         path=str(self.target) if self.stage == 'completed' else None)
 
 
@@ -202,6 +233,9 @@ class ExportManager:
                          preserve_pitch=settings.get('preserve_pitch', True))
             if clean['format'] not in ('mp4', 'webm') or not isinstance(clean['preserve_pitch'], bool):
                 raise ValueError('Invalid export format or pitch setting.')
+            video = settings.get('video_encoding', 'raw')
+            if video not in ('raw', 'webcodecs'):
+                raise ValueError('Invalid video encoding setting.')
             executable = validate_ffmpeg()
             audio = _audio_path(settings.get('audio_url', ''))
             raw_duration, sample_rate, channels = _probe(executable, audio)
@@ -226,7 +260,8 @@ class ExportManager:
             with partial.open('xb'):
                 pass
             job = ExportJob(token, target, partial, music, audio, executable, width, height, fps,
-                            duration, math.ceil(duration * fps), clean, sample_rate, channels, claim=claim)
+                            duration, math.ceil(duration * fps), clean, sample_rate, channels,
+                            video=video, claim=claim)
             self.jobs[token] = job
             while len(self.jobs) > 8:
                 self.jobs.pop(next(iter(self.jobs)))
@@ -234,7 +269,10 @@ class ExportManager:
                 self.reaper = threading.Thread(target=self._reap, daemon=True)
                 self.reaper.start()
             return dict(ok=True, id=token, width=width, height=height, fps=fps, duration=duration,
-                        total_frames=job.total_frames, free_bytes=free)
+                        total_frames=job.total_frames, free_bytes=free, video_encoding=video,
+                        video_codec=ENCODED_CODECS[clean['format']][0],
+                        video_bitrate=_video_bitrate(width, height, fps, clean['format']),
+                        keyframe_interval=fps * 2, max_batch_bytes=MAX_BATCH_BYTES, max_batch_frames=MAX_BATCH_FRAMES)
 
     def get(self, token):
         with self.lock:
@@ -275,10 +313,16 @@ class ExportManager:
 
     def _command(self, job):
         s = job.settings
-        command = [job.executable, '-hide_banner', '-loglevel', 'warning', '-nostdin', '-y',
-                   '-filter_complex_threads', '1', '-threads', '2', '-f', 'rawvideo', '-pix_fmt', 'rgba',
-                   '-s', f'{job.width}x{job.height}', '-r', str(job.fps), '-i', 'pipe:0',
-                   '-threads', '2', '-protocol_whitelist', 'file,pipe', '-i', job.audio]
+        encoded = job.video != 'raw'
+        command = [job.executable, '-hide_banner', '-loglevel', 'warning', '-nostdin', '-y', '-filter_complex_threads', '1']
+        if encoded:
+            # IVF frame headers carry each frame's timestamp, so the copied stream is exactly
+            # constant frame rate. Raw H.264 has no timestamps of its own.
+            command += ['-f', 'ivf', '-i', 'pipe:0']
+        else:
+            command += ['-threads', '2', '-f', 'rawvideo', '-pix_fmt', 'rgba',
+                        '-s', f'{job.width}x{job.height}', '-r', str(job.fps), '-i', 'pipe:0']
+        command += ['-threads', '2', '-protocol_whitelist', 'file,pipe', '-i', job.audio]
         if job.music_bytes:
             command += ['-stream_loop', '-1', '-threads', '2', '-protocol_whitelist', 'file,pipe', '-i', str(job.music)]
         speed = s['speed']
@@ -306,7 +350,17 @@ class ExportManager:
         else:
             filters += ';[n]anull[a]'
         command += ['-filter_complex', filters, '-map', '0:v:0', '-map', '[a]', '-frames:v', str(job.total_frames), '-t', str(job.duration),
-                    '-threads', str(ENCODER_THREADS), '-pix_fmt', 'yuv420p', '-max_muxing_queue_size', '128']
+                    '-threads', str(ENCODER_THREADS), '-max_muxing_queue_size', '128']
+        if encoded:
+            command += ['-c:v', 'copy']
+            if s['format'] == 'mp4':
+                # The default shifts every video frame after the first by the AAC priming delay.
+                command += ['-avoid_negative_ts', 'make_non_negative', '-c:a', 'aac', '-b:a', '192k',
+                            '-movflags', '+frag_keyframe+empty_moov+default_base_moof+skip_trailer', '-f', 'mp4']
+            else:
+                command += ['-c:a', 'libopus', '-b:a', '160k', '-cluster_time_limit', '2000', '-live', '1', '-f', 'webm']
+            return command + ['-progress', 'pipe:1', '-nostats', str(job.partial)]
+        command += ['-pix_fmt', 'yuv420p']
         if s['format'] == 'mp4':
             command += ['-c:v', 'libx264', '-preset', 'veryfast', '-bf', '0', '-crf', '20', '-maxrate', str(_video_maxrate(job.width, job.height, job.fps)),
                         '-bufsize', str(_video_maxrate(job.width, job.height, job.fps)), '-g', str(job.fps * 2), '-c:a', 'aac', '-b:a', '192k',
@@ -320,16 +374,26 @@ class ExportManager:
                         '-cluster_time_limit', '2000', '-live', '1', '-f', 'webm']
         return command + ['-progress', 'pipe:1', '-nostats', str(job.partial)]
 
-    def start(self, token):
+    def start(self, token, video=None):
+        """Start FFmpeg. `video='raw'` lets the editor fall back to raw frames if its encoder failed."""
         job = self.get(token)
         with job.operation:
             with job.lock:
                 if job.stage != 'prepared':
                     raise ValueError('This export has already started or stopped.')
+                if video not in (None, 'raw', job.video):
+                    raise ValueError('Invalid video encoding for this export.')
+                if video is not None:
+                    job.video = video
                 try:
                     self._disk_check(job)
                     job.process = subprocess.Popen(self._command(job), stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0, creationflags=_creationflags())
+                    if job.video != 'raw':
+                        fourcc = ENCODED_CODECS[job.settings['format']][1]
+                        # IVF file header: timestamps count in 1/fps units.
+                        self._write(job, b'DKIF' + struct.pack('<HH4sHHIIII', 0, 32, fourcc, job.width, job.height,
+                                                               job.fps, 1, job.total_frames, 0))
                     job.stage = 'encoding'
                     job.started = job.touched = time.monotonic()
                 except Exception as exc:
@@ -366,6 +430,8 @@ class ExportManager:
             with job.lock:
                 if job.stage != 'encoding' or index != job.frames:
                     raise ValueError('Video frame is out of order or export is not encoding.')
+                if job.video != 'raw':
+                    raise ValueError('This export expects encoded video chunks, not raw frames.')
                 if not 1 <= repeat <= 300 or index + repeat > job.total_frames:
                     raise ValueError('Invalid repeated frame count.')
                 if not (0 <= x < x + width <= job.width and 0 <= y < y + height <= job.height):
@@ -389,12 +455,54 @@ class ExportManager:
                 for _ in range(repeat):
                     if job.stage != 'encoding':
                         raise ValueError('Export was cancelled.')
-                    remaining = memoryview(picture)
-                    while remaining:
-                        written = job.process.stdin.write(remaining)
-                        if not written:
-                            raise BrokenPipeError('FFmpeg closed the input pipe.')
-                        remaining = remaining[written:]
+                    self._write(job, picture)
+                    job.frames += 1
+                    job.touched = time.monotonic()
+            except Exception as exc:
+                error = str(exc)
+                if job.logs:
+                    error += ' ' + ' '.join(job.logs)[-2000:]
+                self.cancel(token, error)
+                raise ValueError(error) from exc
+        return job.status()
+
+    @staticmethod
+    def _write(job, data):
+        remaining = memoryview(data)
+        while remaining:
+            written = job.process.stdin.write(remaining)
+            if not written:
+                raise BrokenPipeError('FFmpeg closed the input pipe.')
+            remaining = remaining[written:]
+
+    def chunks(self, token, index, count, data):
+        """Mux the next `count` encoded frames, starting at frame `index`, into the video.
+
+        Each frame becomes one IVF frame whose timestamp is its frame number, so
+        the output keeps exactly one frame per 1/fps whatever the encoder did.
+        """
+        job = self.get(token)
+        with job.operation:
+            with job.lock:
+                if job.stage != 'encoding' or index != job.frames:
+                    raise ValueError('Video chunk is out of order or export is not encoding.')
+                if job.video == 'raw':
+                    raise ValueError('This export expects raw video frames, not encoded chunks.')
+                if not 1 <= count <= MAX_BATCH_FRAMES or index + count > job.total_frames:
+                    raise ValueError('Invalid video chunk count.')
+                if len(data) > MAX_BATCH_BYTES:
+                    raise ValueError('Video chunk batch is too large.')
+                frames = _split_chunks(data, count)
+                if index == 0 and not frames[0][0]:
+                    raise ValueError('The first video chunk must be a keyframe.')
+                job.touched = time.monotonic()
+            try:
+                self._disk_check(job)
+                for offset, (_, payload) in enumerate(frames):
+                    if job.stage != 'encoding':
+                        raise ValueError('Export was cancelled.')
+                    self._write(job, struct.pack('<IQ', len(payload), index + offset))
+                    self._write(job, payload)
                     job.frames += 1
                     job.touched = time.monotonic()
             except Exception as exc:

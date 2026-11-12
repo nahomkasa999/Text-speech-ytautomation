@@ -120,6 +120,44 @@ try {
     assert(dynamic.repeatFrames(0,90,30,1) === 1, style+' remains animated');
     dynamic.dispose();
   }
+  // Fades change a layer only inside their windows. Outside them the layer is
+  // cached and repeated, and must never reuse a bitmap from another fade state.
+  const faded = new Scene({canvas:{width:160,height:90,background:'#204060'},layers:[
+    {id:'under',type:'shape',x:0,y:0,width:80,height:90,fill:'#3a8f5c'},
+    {id:'fading',type:'shape',x:20,y:20,width:100,height:40,fill:'#f0c040',startTime:1,endTime:4},
+    {id:'over',type:'text',x:30,y:30,width:100,height:30,text:'Fade',fontSize:16,fill:'#fff'},
+    {id:'intro',type:'shape',x:100,y:60,width:50,height:20,fill:'#c03070'}
+  ]});
+  // Layer models do not keep fade fields from their data, so set them like the editor does.
+  // 'fading' is fully transparent from 3 s (its duration) until it ends at 4 s.
+  Object.assign(faded.layers[1], {duration:2, fadeIn:0.5, fadeOut:0.5});
+  faded.layers[3].transition = 'fade';
+  const uncached = document.createElement('canvas'); uncached.width=160; uncached.height=90;
+  const plain = uncached.getContext('2d', {willReadFrequently:true});
+  const truth = time => { renderScene(plain, faded, {currentTime:time}); return plain.getImageData(0,0,160,90).data; };
+  const fadeRenderer = await createExportRenderer(faded,{width:160,height:90});
+  const fadeTimes = [0,0.25,0.5,0.6,0.9,1,1.2,1.5,1.6,2,2.4,2.5,2.6,2.9,3,3.05,3.5,4,4.1,2,1.7,1.25,1.8,3.2,0.3,0.8];
+  let hitsBefore = 0;
+  for (const time of fadeTimes) {
+    if (time === 2) hitsBefore = fadeRenderer.stats.cacheHits;
+    await fadeRenderer.renderFrame(time);
+    const exported = fadeRenderer.canvas.getContext('2d').getImageData(0,0,160,90).data;
+    const expected = truth(time);
+    let max = 0; for (let i=0;i<expected.length;i++) max=Math.max(max,Math.abs(expected[i]-exported[i]));
+    assert(max <= 1, 'fade pixel difference '+max+' at '+time);
+  }
+  assert(fadeRenderer.stats.cacheHits > hitsBefore, 'faded layer cached outside its fade');
+  const spans = [[16,9],[12,1],[31,10],[6,4],[2,1]];
+  for (const [index, count] of spans) {
+    const repeat = fadeRenderer.repeatFrames(index, 60, 10, 1);
+    assert(repeat === count, 'fade repeat at frame '+index+' is '+repeat+', expected '+count);
+    const first = truth(index / 10);
+    for (let next = index + 1; next < index + repeat; next++) {
+      const pixels = truth(next / 10);
+      for (let i = 0; i < pixels.length; i++) assert(pixels[i] === first[i], 'repeated frame '+next+' differs from '+index);
+    }
+  }
+  fadeRenderer.dispose();
   assert(renderer.stats.cacheHits > 0, 'static runs reused');
   assert(renderer.repeatFrames(0,90,30,1) === 30, 'caption changes at frame 30');
   assert(renderer.repeatFrames(30,90,30,1) === 31, 'inclusive layer end');
