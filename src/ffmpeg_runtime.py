@@ -3,9 +3,15 @@
 import shutil
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 REQUIRED_ENCODERS = frozenset({"libx264", "aac", "libvpx-vp9", "libopus"})
+HARDWARE_ENCODERS = {
+    'h264_qsv': ['-preset', 'veryfast', '-look_ahead', '0'],
+    'h264_nvenc': ['-preset', 'p1'],
+    'h264_amf': ['-quality', 'speed', '-usage', 'transcoding'],
+}
 
 
 class FFmpegUnavailable(RuntimeError):
@@ -62,6 +68,55 @@ def validate_ffmpeg(executable: str | Path | None = None) -> str:
     if result.returncode or missing:
         raise FFmpegUnavailable("FFmpeg lacks required CPU encoders: " + ", ".join(sorted(missing or REQUIRED_ENCODERS)))
     return path
+
+
+def hardware_encoder_options(encoder: str, bitrate: int, fps: int) -> list[str]:
+    return ['-c:v', encoder, '-pix_fmt', 'nv12', '-bf', '0',
+            *HARDWARE_ENCODERS[encoder], '-b:v', str(bitrate), '-maxrate', str(bitrate),
+            '-bufsize', str(bitrate), '-g', str(fps * 2)]
+
+
+def select_video_encoder(executable: str, width: int, height: int, fps: int,
+                         preference: str = 'auto') -> str:
+    if preference == 'cpu':
+        return 'libx264'
+    if preference != 'auto':
+        raise ValueError('Invalid video encoder preference.')
+    path = Path(executable).resolve()
+    try:
+        stat = path.stat()
+    except OSError:
+        return 'libx264'
+    return _probe_video_encoder(str(path), stat.st_mtime_ns, stat.st_size, width, height, fps)
+
+
+@lru_cache(maxsize=32)
+def _probe_video_encoder(executable, modified, size, width, height, fps):
+    options = dict(capture_output=True, timeout=3,
+                   creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
+    try:
+        result = subprocess.run([executable, '-hide_banner', '-encoders'], **options)
+    except (OSError, subprocess.TimeoutExpired):
+        return 'libx264'
+    if result.returncode:
+        return 'libx264'
+    advertised = {fields[1] for line in result.stdout.decode('utf-8', errors='replace').splitlines()
+                  if len(fields := line.split()) >= 2}
+    bitrate = max(500_000, min(8_000_000, (8_000_000 * width * height * fps + 62_207_999) // 62_208_000))
+    for encoder in HARDWARE_ENCODERS:
+        if encoder not in advertised:
+            continue
+        command = [executable, '-hide_banner', '-loglevel', 'error', '-nostdin',
+                   '-f', 'lavfi', '-i', f'color=c=black:s={width}x{height}:r={fps}',
+                   '-frames:v', '2', '-an', *hardware_encoder_options(encoder, bitrate, fps),
+                   '-f', 'h264', 'pipe:1']
+        try:
+            result = subprocess.run(command, **options)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0 and result.stdout:
+            return encoder
+    return 'libx264'
 
 
 if __name__ == "__main__":

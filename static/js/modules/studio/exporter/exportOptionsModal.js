@@ -42,6 +42,24 @@ export class ExportOptionsModal {
           </div>
 
           <div class="export-field-group">
+            <label class="export-label" for="export-select-fps">Frame rate</label>
+            <select id="export-select-fps" class="export-select">
+              <option value="30" selected>30 fps · Smooth motion</option>
+              <option value="24">24 fps</option>
+              <option value="15">15 fps · Faster for still backgrounds and waveforms</option>
+            </select>
+          </div>
+
+          <div class="export-field-group" id="export-cpu-preset-group" hidden>
+            <label class="export-label" for="export-cpu-preset">MP4 software encoding</label>
+            <select id="export-cpu-preset" class="export-select">
+              <option value="veryfast" selected>Balanced</option>
+              <option value="superfast">Fast · Can reduce detail</option>
+              <option value="ultrafast">Fastest · Can reduce detail further</option>
+            </select>
+          </div>
+
+          <div class="export-field-group">
             <label class="export-checkbox-label">
               <input type="checkbox" id="export-include-bgm" checked />
               Include Background Music
@@ -59,6 +77,16 @@ export class ExportOptionsModal {
     document.body.appendChild(div);
     this.modalEl = div;
 
+    const updatePresetVisibility = () => {
+      const format = div.querySelector('input[name="export-format"]:checked').value;
+      div.querySelector('#export-cpu-preset-group').hidden =
+        format !== 'mp4' || typeof window.pywebview?.api?.prepare_video_export !== 'function';
+    };
+    this.updatePresetVisibility = updatePresetVisibility;
+    div.querySelectorAll('input[name="export-format"]').forEach(input => {
+      input.addEventListener('change', updatePresetVisibility);
+    });
+
     document.getElementById('export-modal-close-btn').addEventListener('click', () => this.hide());
     document.getElementById('export-modal-cancel').addEventListener('click', () => this.hide());
     document.getElementById('export-modal-start').addEventListener('click', () => {
@@ -68,11 +96,14 @@ export class ExportOptionsModal {
       const includeBgm = document.getElementById('export-include-bgm').checked;
 
       this.hide();
-      this.onConfirm({ width: w, height: h, format, includeBgm });
+      const fps = Number(div.querySelector('#export-select-fps').value);
+      const cpuPreset = div.querySelector('#export-cpu-preset').value;
+      this.onConfirm({ width: w, height: h, format, includeBgm, fps, cpuPreset });
     });
   }
 
   show() {
+    this.updatePresetVisibility();
     this.modalEl.classList.remove('hidden');
   }
 

@@ -14,7 +14,6 @@ function active(layer, time) {
 // Layers that may look different on every frame they are shown.
 function animated(layer) {
   return layer.type === 'video' || layer.type === 'audio_widget' || layer.id === 'layer_player_widget' ||
-    (layer.type === 'frame' && layer.children?.length) ||
     // The renderer only knows fades. Treat any other transition as animated rather than guess.
     (!!layer.transition && layer.transition !== 'fade');
 }
@@ -49,8 +48,14 @@ function changing(layer, time) {
 }
 
 // What a static layer's picture depends on besides its frozen properties.
-function staticKey(layer, time) {
-  return fades(layer) ? String(fadeOpacity(layer, time)) : '';
+function staticKey(layer, time, scene) {
+  const opacity = fades(layer) ? String(fadeOpacity(layer, time)) : '';
+  if (layer.type !== 'frame' || !layer.children?.length) return opacity;
+  const children = layer.children.map(id => {
+    const child = scene.getLayer(id);
+    return child && child.visible && time >= child.startTime && time <= child.endTime ? id : '';
+  });
+  return JSON.stringify([opacity, children]);
 }
 
 // The scene-space box a changing layer stays inside, or null when it may paint anywhere.
@@ -295,7 +300,7 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
         const dynamic = group.always || visible.some(layer => changing(layer, time));
         // A changing group never matches a static key, so its first static frame repaints.
         let key = !visible.length ? null
-          : visible.map(layer => `${layer.id}\u0001${changing(layer, time) ? '*' : staticKey(layer, time)}`).join('\0');
+          : visible.map(layer => `${layer.id}\u0001${changing(layer, time) ? '*' : staticKey(layer, time, scene)}`).join('\0');
         if (key !== null && group.caption) key += '\0' + captionKey(visible[0], time);
         return { group, visible, key, dynamic };
       });
@@ -351,13 +356,13 @@ export async function createExportRenderer(source, { width, height, bgImage = nu
       const time = frameIndex / fps * speed;
       if (scene.layers.some(layer => active(layer, time) && changing(layer, time))) return 1;
       const state = scene.layers.map(layer => active(layer, time));
-      const opacity = scene.layers.map((layer, i) => state[i] ? staticKey(layer, time) : null);
+      const opacity = scene.layers.map((layer, i) => state[i] ? staticKey(layer, time, scene) : null);
       const captions = scene.layers.map((layer, i) => state[i] && (layer.type === 'transcription' || layer.id === 'layer_captions') ? captionKey(layer, time) : null);
       let count = 1;
       while (count < 300 && frameIndex + count < totalFrames) {
         const next = (frameIndex + count) / fps * speed;
         if (scene.layers.some((layer, i) => active(layer, next) !== state[i] ||
-          (state[i] && (changing(layer, next) || staticKey(layer, next) !== opacity[i])) ||
+          (state[i] && (changing(layer, next) || staticKey(layer, next, scene) !== opacity[i])) ||
           (captions[i] !== null && captionKey(layer, next) !== captions[i]))) break;
         count++;
       }

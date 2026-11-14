@@ -55,6 +55,20 @@ if (process.argv.includes('--mock')) {
   const hidden = await createExportRenderer(new Scene({layers:[{type:'image',visible:false,src:'missing.png'}]}), {width:160,height:90});
   await hidden.renderFrame(0);
   hidden.dispose();
+  const framed = new Scene({ canvas: { width: 160, height: 90 }, layers: [
+    { id: 'frame', type: 'frame', x: 0, y: 0, width: 100, height: 70, children: ['child'] },
+    { id: 'child', type: 'shape', x: 10, y: 10, width: 30, height: 20, startTime: 1, endTime: 2 }
+  ] });
+  const frameRenderer = await createExportRenderer(framed, { width: 160, height: 90 });
+  assert(frameRenderer.repeatFrames(0, 90, 30, 1) === 30, 'frame child appearance boundary');
+  assert(frameRenderer.repeatFrames(30, 90, 30, 1) === 31, 'frame child disappearance boundary');
+  await frameRenderer.renderFrame(0);
+  const frameDraws = frameRenderer.stats.draws;
+  await frameRenderer.renderFrame(0.5);
+  assert(frameRenderer.stats.draws === frameDraws, 'static frame container cache');
+  await frameRenderer.renderFrame(1);
+  assert(frameRenderer.stats.draws > frameDraws, 'frame child invalidates container cache');
+  frameRenderer.dispose();
   console.log('Export renderer cache and timing checks passed');
   process.exit(0);
 }

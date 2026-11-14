@@ -100,7 +100,7 @@ export class ExportManager {
       speed: this.state.video.audioSpeed,
       volume: this.state.video.audioVolume,
       preservePitch: this.state.video.preservePitch,
-      fps: 30,
+      fps: exportOpts.fps || 30,
       videoBitrate: 6000000,
       signal: this.exportAbort.signal,
       onProgress: (p, stage, audioTime) => {
@@ -147,7 +147,7 @@ export class ExportManager {
             filename: `${this.getExportFilename()}.${exportOpts.format || 'mp4'}`,
             format: exportOpts.format || 'mp4',
             width: exportOpts.width || 1920, height: exportOpts.height || 1080,
-            fps: 30, audio_url: audioUrl,
+            fps: exportOpts.fps || 30, audio_url: audioUrl, cpu_preset: exportOpts.cpuPreset,
             speed: this.state.video.audioSpeed,
             volume: this.state.video.audioVolume,
             preserve_pitch: this.state.video.preservePitch,

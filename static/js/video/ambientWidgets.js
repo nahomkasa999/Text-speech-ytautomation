@@ -336,10 +336,13 @@ export function ambientBounds(layer, scale = 1) {
 }
 
 // One reusable scratch canvas for the glow pass.
-let scratch = null;
-function getScratch(w, h) {
+const scratchCanvases = new Map();
+function getScratch(w, h, willReadFrequently) {
+  let scratch = scratchCanvases.get(willReadFrequently);
   if (!scratch) {
     scratch = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : document.createElement('canvas');
+    scratch.getContext('2d', { willReadFrequently });
+    scratchCanvases.set(willReadFrequently, scratch);
   }
   if (scratch.width < w) scratch.width = w;
   if (scratch.height < h) scratch.height = h;
@@ -364,7 +367,7 @@ export function drawAmbientWidget(ctx, layer, t, color, energy = null) {
   const pad = padOf(b, glow);
   const sw = Math.ceil(b.w + pad * 2);
   const sh = Math.ceil(b.h + pad * 2);
-  const off = getScratch(sw, sh);
+  const off = getScratch(sw, sh, ctx.getContextAttributes?.().willReadFrequently ?? false);
   const octx = off.getContext('2d');
   octx.setTransform(1, 0, 0, 1, 0, 0);
   octx.clearRect(0, 0, sw, sh);

@@ -19,12 +19,15 @@ else:
     import fcntl
 
 from src.config import AUDIO_DIR, APP_DATA_DIR
-from src.ffmpeg_runtime import validate_ffmpeg
+from src.services.export_pixels import ExportPicture
+from src.ffmpeg_runtime import hardware_encoder_options, select_video_encoder, validate_ffmpeg
 
 MAX_CHUNK = 4 * 1024 * 1024
 # Encoded video arrives in ordered batches of whole frames (WebCodecs chunks).
 MAX_BATCH_BYTES = 16 * 1024 * 1024
 MAX_BATCH_FRAMES = 300
+MAX_PATCH_RECORDS = 120
+MAX_PATCH_FRAMES = 300
 # Video the editor already compressed with WebCodecs: container fourcc per output format.
 ENCODED_CODECS = {'mp4': ('h264', b'H264'), 'webm': ('vp9', b'VP90')}
 DISK_RESERVE = 128 * 1024 * 1024
@@ -162,6 +165,7 @@ class ExportJob:
     sample_rate: int
     channels: int
     video: str = 'raw'
+    encoder: str | None = None
     stage: str = 'prepared'
     frames: int = 0
     music_bytes: int = 0
@@ -185,7 +189,7 @@ class ExportJob:
                         progress=min(1, self.frames / self.total_frames), elapsed_seconds=elapsed,
                         speed=speed, eta_seconds=(max(0, self.duration-self.encoded_seconds)/speed
                         if speed and self.stage == 'encoding' else (0 if self.stage == 'completed' else None)),
-                        encoded_seconds=self.encoded_seconds, error=self.error, video_encoding=self.video,
+                        encoded_seconds=self.encoded_seconds, error=self.error, video_encoding=self.video, video_encoder=self.encoder,
                         path=str(self.target) if self.stage == 'completed' else None)
 
 
@@ -243,6 +247,9 @@ class ExportManager:
                          preserve_pitch=settings.get('preserve_pitch', True))
             if clean['format'] not in ('mp4', 'webm') or not isinstance(clean['preserve_pitch'], bool):
                 raise ValueError('Invalid export format or pitch setting.')
+            clean['preset'] = settings.get('cpu_preset', 'veryfast')
+            if clean['preset'] not in ('veryfast', 'superfast', 'ultrafast'):
+                raise ValueError('Invalid CPU encoding preset.')
             video = settings.get('video_encoding', 'raw')
             if video not in ('raw', 'webcodecs'):
                 raise ValueError('Invalid video encoding setting.')
@@ -282,7 +289,9 @@ class ExportManager:
                         total_frames=job.total_frames, free_bytes=free, video_encoding=video,
                         video_codec=ENCODED_CODECS[clean['format']][0],
                         video_bitrate=_video_bitrate(width, height, fps, clean['format']),
-                        keyframe_interval=fps * 2, max_batch_bytes=MAX_BATCH_BYTES, max_batch_frames=MAX_BATCH_FRAMES)
+                        keyframe_interval=fps * 2, max_batch_bytes=MAX_BATCH_BYTES, max_batch_frames=MAX_BATCH_FRAMES,
+                        max_patch_batch_bytes=MAX_BATCH_BYTES, max_patch_batch_frames=MAX_PATCH_FRAMES,
+                        max_patch_batch_records=MAX_PATCH_RECORDS)
 
     def get(self, token):
         with self.lock:
@@ -330,7 +339,7 @@ class ExportManager:
             # constant frame rate. Raw H.264 has no timestamps of its own.
             command += ['-f', 'ivf', '-i', 'pipe:0']
         else:
-            command += ['-threads', '2', '-f', 'rawvideo', '-pix_fmt', 'rgba',
+            command += ['-threads', '2', '-f', 'rawvideo', '-pix_fmt', 'yuv420p',
                         '-s', f'{job.width}x{job.height}', '-r', str(job.fps), '-i', 'pipe:0']
         command += ['-threads', '2', '-protocol_whitelist', 'file,pipe', '-i', job.audio]
         if job.music_bytes:
@@ -370,13 +379,19 @@ class ExportManager:
             else:
                 command += ['-c:a', 'libopus', '-b:a', '160k', '-cluster_time_limit', '2000', '-live', '1', '-f', 'webm']
             return command + ['-progress', 'pipe:1', '-nostats', str(job.partial)]
-        command += ['-pix_fmt', 'yuv420p']
+        command += ['-colorspace', 'smpte170m', '-color_range', 'tv']
         if s['format'] == 'mp4':
-            command += ['-c:v', 'libx264', '-preset', 'veryfast', '-bf', '0', '-crf', '20', '-maxrate', str(_video_maxrate(job.width, job.height, job.fps)),
-                        '-bufsize', str(_video_maxrate(job.width, job.height, job.fps)), '-g', str(job.fps * 2), '-c:a', 'aac', '-b:a', '192k',
+            bitrate = _video_maxrate(job.width, job.height, job.fps)
+            if job.encoder and job.encoder != 'libx264':
+                command += hardware_encoder_options(job.encoder, bitrate, job.fps)
+            else:
+                command += ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', s['preset'],
+                            '-bf', '0', '-crf', '20', '-maxrate', str(bitrate), '-bufsize', str(bitrate),
+                            '-g', str(job.fps * 2)]
+            command += ['-c:a', 'aac', '-b:a', '192k',
                         '-movflags', '+frag_keyframe+empty_moov+default_base_moof+skip_trailer', '-f', 'mp4']
         else:
-            command += ['-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '6', '-row-mt', '1',
+            command += ['-pix_fmt', 'yuv420p', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '6', '-row-mt', '1',
                         '-lag-in-frames', '0', '-b:v', str(min(4_000_000, _video_maxrate(job.width, job.height, job.fps))),
                         '-maxrate', str(_video_maxrate(job.width, job.height, job.fps)),
                         '-bufsize', str(_video_maxrate(job.width, job.height, job.fps)),
@@ -388,6 +403,8 @@ class ExportManager:
         """Start FFmpeg. `video='raw'` lets the editor fall back to raw frames if its encoder failed."""
         job = self.get(token)
         with job.operation:
+            encoder = (select_video_encoder(job.executable, job.width, job.height, job.fps)
+                       if (video or job.video) == 'raw' and job.settings['format'] == 'mp4' else None)
             with job.lock:
                 if job.stage != 'prepared':
                     raise ValueError('This export has already started or stopped.')
@@ -397,6 +414,7 @@ class ExportManager:
                     job.video = video
                 try:
                     self._disk_check(job)
+                    job.encoder = encoder if job.video == 'raw' else None
                     job.process = subprocess.Popen(self._command(job), stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0, creationflags=_creationflags())
                     if job.video != 'raw':
@@ -426,53 +444,76 @@ class ExportManager:
         job.process.stderr.close()
 
     def frame(self, token, index, repeat, data, box=None):
-        """Encode the next frame from RGBA pixels for `box` (x, y, width, height).
-
-        Pixels outside the box stay as they were in the previous frame, so the
-        editor uploads only the part of the picture that moved.
-        """
         job = self.get(token)
-        x, y, width, height = box or (0, 0, job.width, job.height)
-        whole = (x, y, width, height) == (0, 0, job.width, job.height)
+        return self._frames(job, index, [(box or (0, 0, job.width, job.height), repeat, data)])
+
+    def frames(self, token, index, count, data):
+        if not 1 <= count <= MAX_PATCH_RECORDS or len(data) > MAX_BATCH_BYTES:
+            raise ValueError('Invalid video patch batch size.')
+        body = memoryview(data)
+        records = []
+        offset = 0
+        for _ in range(count):
+            if offset + 24 > len(body):
+                raise ValueError('Video patch batch is truncated.')
+            fields = [int.from_bytes(body[pos:pos + 4], 'little') for pos in range(offset, offset + 24, 4)]
+            offset += 24
+            x, y, width, height, repeat, size = fields
+            if offset + size > len(body):
+                raise ValueError('Video patch batch is truncated.')
+            records.append(((x, y, width, height), repeat, body[offset:offset + size]))
+            offset += size
+        if offset != len(body):
+            raise ValueError('Video patch batch has trailing bytes.')
+        return self._frames(self.get(token), index, records)
+
+    def _frames(self, job, index, records):
         with job.operation:
             with job.lock:
                 if job.stage != 'encoding' or index != job.frames:
                     raise ValueError('Video frame is out of order or export is not encoding.')
                 if job.video != 'raw':
                     raise ValueError('This export expects encoded video chunks, not raw frames.')
-                if not 1 <= repeat <= 300 or index + repeat > job.total_frames:
+                frames = sum(repeat for _, repeat, _ in records)
+                if frames > MAX_PATCH_FRAMES or index + frames > job.total_frames:
                     raise ValueError('Invalid repeated frame count.')
-                if not (0 <= x < x + width <= job.width and 0 <= y < y + height <= job.height):
-                    raise ValueError('Video frame box is outside the picture.')
-                if len(data) != width * height * 4:
-                    raise ValueError('Video frame has an incorrect byte length.')
-                if job.picture is None and not whole:
-                    raise ValueError('The first video frame must cover the whole picture.')
+                whole_box = (0, 0, job.width, job.height)
+                for offset, (box, repeat, data) in enumerate(records):
+                    x, y, width, height = box
+                    if repeat < 1:
+                        raise ValueError('Invalid repeated frame count.')
+                    if not (0 <= x < x + width <= job.width and 0 <= y < y + height <= job.height):
+                        raise ValueError('Video frame box is outside the picture.')
+                    if len(data) != width * height * 4:
+                        raise ValueError('Video frame has an incorrect byte length.')
+                    if offset == 0 and index == 0 and box != whole_box:
+                        raise ValueError('The first video frame must cover the whole picture.')
                 job.touched = time.monotonic()
-            if whole:
-                picture = job.picture = data if isinstance(data, bytearray) else bytearray(data)
-            else:
-                picture = job.picture
-                target, source = memoryview(picture), memoryview(data)
-                stride, row = job.width * 4, width * 4
-                for line in range(height):
-                    start = (y + line) * stride + x * 4
-                    target[start:start + row] = source[line * row:(line + 1) * row]
             try:
                 self._disk_check(job)
-                for _ in range(repeat):
+                for box, repeat, data in records:
                     if job.stage != 'encoding':
                         raise ValueError('Export was cancelled.')
-                    self._write(job, picture)
-                    job.frames += 1
-                    job.touched = time.monotonic()
+                    picture = self._patch_picture(job, box, data)
+                    for _ in range(repeat):
+                        if job.stage != 'encoding':
+                            raise ValueError('Export was cancelled.')
+                        self._write(job, picture)
+                        job.frames += 1
+                        job.touched = time.monotonic()
             except Exception as exc:
                 error = str(exc)
                 if job.logs:
                     error += ' ' + ' '.join(job.logs)[-2000:]
-                self.cancel(token, error)
+                self.cancel(job.id, error)
                 raise ValueError(error) from exc
         return job.status()
+
+    @staticmethod
+    def _patch_picture(job, box, data):
+        if job.picture is None:
+            job.picture = ExportPicture(job.width, job.height)
+        return job.picture.update(data, box)
 
     @staticmethod
     def _write(job, data):

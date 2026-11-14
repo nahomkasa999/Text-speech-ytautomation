@@ -427,3 +427,28 @@ def test_encoder_failure_before_start_falls_back_to_raw(manager, tmp_path):
     manager.cancel(raw['id'])
     with pytest.raises(ValueError, match='video encoding'):
         manager.prepare(tmp_path / 'bad.mp4', settings(video_encoding='gpu'))
+
+
+def test_patch_batch_validates_before_encoding_and_keeps_static_pixels(manager, tmp_path):
+    info = manager.prepare(tmp_path / 'batch.mp4', settings())
+    token = info['id']
+    manager.start(token)
+
+    def record(box, repeat, pixels):
+        fields = (*box, repeat, len(pixels))
+        return b''.join(value.to_bytes(4, 'little') for value in fields) + pixels
+
+    initial = record((0, 0, 64, 48), 10, bytes([200, 30, 30, 255]) * (64 * 48))
+    patch = record((31, 15, 17, 17), 10, bytes([30, 30, 200, 255]) * (17 * 17))
+    with pytest.raises(ValueError, match='truncated'):
+        manager.frames(token, 0, 2, initial + patch[:-1])
+    assert manager.get(token).frames == 0
+    assert manager.frames(token, 0, 2, initial + patch)['frames'] == 20
+    path = manager.finish(token)['path']
+    pixels = subprocess.check_output([native.validate_ffmpeg(), '-v', 'error', '-i', path,
+                                      '-an', '-fps_mode', 'passthrough', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'])
+    assert len(pixels) == 20 * 64 * 48 * 3
+    for frame, x, y, color in [(0, 40, 24, (200, 30, 30)), (19, 40, 24, (30, 30, 200)),
+                               (19, 8, 8, (200, 30, 30))]:
+        offset = ((frame * 48 + y) * 64 + x) * 3
+        assert all(abs(actual - expected) < 20 for actual, expected in zip(pixels[offset:offset+3], color))

@@ -62,6 +62,18 @@ async def frame(token: str, index: int, request: Request, repeat: int = 1,
         job.transport.release()
 
 
+@router.put('/{token}/frames')
+async def frames(token: str, index: int, count: int, request: Request):
+    job = _job(token)
+    if not job.transport.acquire(blocking=False):
+        raise HTTPException(409, 'Another upload is in progress.')
+    try:
+        body = await _bounded_body(request, MAX_BATCH_BYTES)
+        return await _call(export_manager.frames, token, index, count, body)
+    finally:
+        job.transport.release()
+
+
 @router.put('/{token}/chunks')
 async def chunks(token: str, index: int, count: int, request: Request):
     """Ordered batch of WebCodecs-encoded frames: `<u32 size><u8 flags><payload>` per frame."""

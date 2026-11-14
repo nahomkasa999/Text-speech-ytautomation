@@ -85,7 +85,7 @@ export async function webCodecsConfigs({ format, width, height, fps, bitrate }) 
     ? ['6400', '4d00', '42e0'].map(profile => `avc1.${profile}${level}`)
     : ['vp09.00.41.08', 'vp09.00.40.08', 'vp09.00.31.08'];
   const configs = [];
-  for (const hardwareAcceleration of ['no-preference', 'prefer-software']) {
+  for (const hardwareAcceleration of ['prefer-hardware', 'no-preference', 'prefer-software']) {
     for (const codec of codecs) {
       const config = {
         codec, width, height, bitrate, framerate: fps, bitrateMode: 'variable',
@@ -266,6 +266,9 @@ async function encodeFrames({ job, renderer, speed, config, signal, frameDone, s
 
 // Read back the changed part of each frame and send its pixels for FFmpeg to encode.
 async function uploadRawFrames({ job, renderer, speed, signal, frameDone, stats }) {
+  if (job.max_patch_batch_bytes && job.max_patch_batch_frames && job.max_patch_batch_records) {
+    return uploadRawBatches({ job, renderer, speed, signal, frameDone, stats });
+  }
   const ctx = renderer.canvas.getContext('2d');
   let lastYield = performance.now();
   for (let index = 0; index < job.total_frames;) {
@@ -286,6 +289,77 @@ async function uploadRawFrames({ job, renderer, speed, signal, frameDone, stats 
       await yieldToUi();
       lastYield = performance.now();
     }
+  }
+}
+
+async function uploadRawBatches({ job, renderer, speed, signal, frameDone, stats }) {
+  const ctx = renderer.canvas.getContext('2d');
+  const byteLimit = Math.min(16 * 1024 * 1024, job.max_patch_batch_bytes);
+  const frameLimit = Math.min(300, job.max_patch_batch_frames);
+  const recordLimit = Math.min(120, job.max_patch_batch_records);
+  let records = [];
+  let bytes = 0;
+  let frames = 0;
+  let firstIndex = 0;
+  let uploading = null;
+  let failure = null;
+  let lastYield = performance.now();
+  const check = () => {
+    if (signal.aborted) throw new ExportCancelledError();
+    if (failure) throw failure;
+  };
+  const send = async () => {
+    if (!records.length) return;
+    if (uploading) await uploading;
+    check();
+    const body = new Uint8Array(bytes);
+    const view = new DataView(body.buffer);
+    let offset = 0;
+    for (const { dirty, repeat, pixels } of records) {
+      const fields = [dirty.x, dirty.y, dirty.width, dirty.height, repeat, pixels.byteLength];
+      for (let field = 0; field < fields.length; field++) view.setUint32(offset + field * 4, fields[field], true);
+      body.set(pixels, offset + 24);
+      offset += 24 + pixels.byteLength;
+    }
+    const endIndex = firstIndex + frames;
+    const suffix = `/frames?index=${firstIndex}&count=${records.length}`;
+    uploading = requestJob(job.id, suffix, {
+      method: 'PUT', body, signal, headers: { 'Content-Type': 'application/octet-stream' },
+    }).then(status => frameDone(endIndex, status), error => { failure = error; });
+    firstIndex = endIndex;
+    records = [];
+    bytes = 0;
+    frames = 0;
+  };
+  try {
+    for (let index = 0; index < job.total_frames;) {
+      check();
+      const dirty = await renderer.renderFrame(index / job.fps * speed);
+      check();
+      const repeat = Math.min(frameLimit, renderer.repeatFrames(index, job.total_frames, job.fps, speed));
+      const size = 24 + dirty.width * dirty.height * 4;
+      if (size > byteLimit) throw new Error('A video frame exceeds the server upload limit.');
+      if (records.length && (bytes + size > byteLimit || frames + repeat > frameLimit || records.length >= recordLimit)) await send();
+      check();
+      const pixels = ctx.getImageData(dirty.x, dirty.y, dirty.width, dirty.height).data;
+      records.push({ dirty, repeat, pixels });
+      bytes += size;
+      frames += repeat;
+      stats.renderedFrames++;
+      index += repeat;
+      frameDone(null, null, index);
+      if (records.length >= recordLimit || frames >= frameLimit || bytes >= byteLimit) await send();
+      if (performance.now() - lastYield > YIELD_MS) {
+        await yieldToUi();
+        lastYield = performance.now();
+      }
+    }
+    await send();
+    if (uploading) await uploading;
+    check();
+  } finally {
+    records = [];
+    if (uploading) await uploading;
   }
 }
 
@@ -345,7 +419,10 @@ export async function exportVideoNative({ scene, bgImage, settings, musicUrl, si
       finally { polling = false; }
     }, 1000);
     report({ stage: 'Preparing scene', progress: 0 });
-    renderer = await createExportRenderer(scene, { width: job.width, height: job.height, bgImage, signal });
+    renderer = await createExportRenderer(scene, {
+      width: job.width, height: job.height, bgImage, signal,
+      willReadFrequently: job.video_encoding !== 'webcodecs',
+    });
     checkAbort();
     if (musicUrl) await uploadMusic(job.id, musicUrl, signal, report);
     let encodedDone = false;
@@ -369,6 +446,11 @@ export async function exportVideoNative({ scene, bgImage, settings, musicUrl, si
       }
     }
     if (!encodedDone) {
+      if (job.video_encoding === 'webcodecs') {
+        renderer.dispose();
+        renderer = await createExportRenderer(scene, { width: job.width, height: job.height, bgImage, signal });
+        stats.renderedFrames = 0;
+      }
       if (job.video_encoding === 'webcodecs' && !video.fallback) video.fallback = 'No supported WebCodecs encoder.';
       report(await requestJob(job.id, '/start?video=raw', { method: 'POST', signal }));
       await uploadRawFrames({ job, renderer, speed: settings.speed, signal, frameDone, stats });
